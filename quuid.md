@@ -1,49 +1,70 @@
 # quuid — GUID / COM discovery CLI for Windows
 
-`quuid` is a single-file Windows command-line tool that helps you **parse, discover, and cross-reference** UUIDs/GUIDs/CLSIDs/IIDs commonly found in COM, type libraries, and Windows binaries.
+`quuid` is a single-file Windows CLI for **parsing, discovering, and cross-referencing** UUIDs/GUIDs/CLSIDs/IIDs commonly encountered in COM, type libraries, and Windows binaries.
 
-It is designed to be:
-- **Practical**: answers “what is this GUID?” quickly.
-- **Forensic-friendly**: scans files for embedded GUID text.
-- **COM-aware**: queries the Windows registry for CLSID/IID/TypeLib/AppID registrations.
-- **Minimal**: one C source file, builds with MSVC.
+Design goals:
+- **Fast answers** for “what is this GUID?”
+- **Forensic utility** (scan files/directories for embedded GUIDs)
+- **COM awareness** via registry lookups (CLSID / Interface / TypeLib / AppID)
+- **Minimal footprint**: one C file, MSVC build, no third-party deps
+
+---
 
 ## Features
 
-### 1) Parse GUIDs into multiple forms
-- Canonical braced/dashed strings
+### Parse GUIDs into useful forms
+- Braced canonical form (`{...}`)
+- Dashed form
+- Field breakdown (`Data1/Data2/Data3/Data4`)
 - C initializer form
 - Raw in-memory byte layout (`db` list)
 
-### 2) Registry discovery (COM cross-reference)
-Given a GUID, `quuid` checks common COM registration locations under `HKCR`:
-- `HKCR\CLSID\{...}` (class registrations)
-- `HKCR\Interface\{...}` (interface registrations)
-- `HKCR\TypeLib\{...}` (type library registrations)
-- `HKCR\AppID\{...}` (application registrations)
+### Find COM registry meaning for a GUID
+Queries common COM registration loci under `HKCR`:
+- `HKCR\CLSID\{...}`
+- `HKCR\Interface\{...}`
+- `HKCR\TypeLib\{...}`
+- `HKCR\AppID\{...}`
 
-It prints relevant subkeys/values when present (e.g., `InprocServer32`, `LocalServer32`, `ProxyStubClsid32`, etc.).
+Includes extra details such as `ThreadingModel`, `ProxyStubClsid32`, and TypeLib `win32/win64` paths when present.
 
-### 3) Scan files/directories for GUID text
-Scans a file or directory tree for ASCII GUID patterns in the form:
-- `{xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}`
-- `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
+Supports registry view selection:
+- `--wow64` for 64-bit registry view
+- `--wow32` for 32-bit registry view
+- `--both-views` to print both (tagged `:64` / `:32`)
 
-Optionally cross-references each discovered GUID against the registry.
+### Scan files and directory trees for GUIDs
+Scans for:
+- ASCII GUIDs (braced or dashed)
+- Optional **binary GUIDs** (16-byte memory-layout GUIDs) with:
+  - `--binary` (RFC4122-ish variant + version heuristic)
+  - `--binary-loose` (variant-only heuristic; noisier)
 
-### 4) Enumerate TypeLib contents
-Loads a type library (`.tlb`, or a `.dll`/`.ocx` containing an embedded type library) via `LoadTypeLibEx` and prints:
-- LIBID (TypeLib GUID), version, LCID
-- Types and their GUIDs (interfaces, coclasses, records, etc.)
+Extra scan knobs:
+- `--locate` prints `file:offset:kind:{guid}` per match (for forensic offset work)
+- `--registry` cross-references each unique GUID against the registry
+- `--both-views` cross-references against both 32/64 registry views
+- Reparse points (symlinks/junctions) are skipped to avoid loops
 
-### 5) Enumerate registry categories
-Dumps GUID subkeys under:
+### Pivot CLSID → server binary
+`server` resolves `CLSID` → `InprocServer32` / `LocalServer32` (expanded) and can optionally scan the server binary.
+
+### Enumerate registry categories
+Lists GUID-named subkeys under:
 - `HKCR\CLSID`
 - `HKCR\Interface`
 - `HKCR\TypeLib`
 - `HKCR\AppID`
 
-This is primarily for reconnaissance or indexing.
+Optional:
+- `--with-name` also prints the default value for each subkey when present.
+
+### Enumerate TypeLib contents
+Loads a type library (`.tlb`, or a `.dll`/`.ocx` with embedded TypeLib) and prints:
+- LIBID (TypeLib GUID), version, LCID, SYSKIND
+- Each type’s GUID, kind, and name when available
+
+---
 
 ## Build
 
@@ -56,133 +77,113 @@ This is primarily for reconnaissance or indexing.
 cl /nologo /W4 /O2 /DUNICODE /D_UNICODE quuid.c ole32.lib oleaut32.lib advapi32.lib
 ````
 
-Output: `quuid.exe`
+---
 
 ## Usage
 
+Global flags (before the command):
+
+* `--verbose` prints Win32 error messages for non-fatal failures (missing files, access denied, etc.)
+
+Commands:
+
 ```text
-quuid parse <guid>
-quuid find  <guid>
-quuid scan  <path> [--registry]
-quuid tlb   <file.tlb|.dll|.ocx>
-quuid enum  clsid|iid|typelib|appid [--limit N]
+quuid parse  <guid> [--one-line]
+quuid find   <guid> [--wow32|--wow64] [--both-views]
+quuid scan   <path> [--registry] [--both-views] [--binary] [--binary-loose] [--locate] [--one-line]
+quuid server <clsid-guid> [--scan] [scan flags...]
+quuid tlb    <file.tlb|.dll|.ocx>
+quuid enum   clsid|iid|typelib|appid [--limit N] [--with-name]
 ```
+
+---
 
 ## Examples
 
-### Parse a GUID and print representations
+### Parse a GUID
 
 ```bat
 quuid parse 6F9619FF-8B86-D011-B42D-00C04FC964FF
 ```
 
-### Find COM registry meaning for a GUID
+### Parse (scripting mode)
 
 ```bat
-quuid find {00021401-0000-0000-C000-000000000046}
+quuid parse 6F9619FF-8B86-D011-B42D-00C04FC964FF --one-line
 ```
 
-### Scan a directory for GUID text and cross-reference registry hits
+### Find COM registration (64-bit view)
+
+```bat
+quuid find {00021401-0000-0000-C000-000000000046} --wow64
+```
+
+### Find in both registry views
+
+```bat
+quuid find {00021401-0000-0000-C000-000000000046} --both-views
+```
+
+### Scan System32 for ASCII GUIDs and cross-reference registry
 
 ```bat
 quuid scan C:\Windows\System32 --registry
 ```
 
-### Enumerate a type library (TLB)
+### Scan with per-hit offsets (forensics)
+
+```bat
+quuid scan C:\Windows\System32 --locate
+```
+
+### Scan for binary GUIDs too (heuristic)
+
+```bat
+quuid scan C:\Windows\System32 --binary
+```
+
+### Pivot CLSID → server module, then scan the module
+
+```bat
+quuid server {XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX} --scan --binary --registry --both-views
+```
+
+### Enumerate first 50 CLSIDs (with names)
+
+```bat
+quuid enum clsid --limit 50 --with-name
+```
+
+### Enumerate TypeLib contents
 
 ```bat
 quuid tlb C:\Windows\System32\stdole2.tlb
 ```
 
-### List first 50 CLSID registrations
+---
 
-```bat
-quuid enum clsid --limit 50
-```
+## Notes on accuracy vs noise
 
-## Output notes
+* ASCII scanning is typically high-signal.
+* Binary scanning can be very noisy in general binaries; `--binary` uses a variant+version heuristic to keep the set smaller.
+* If you need maximum recall, use `--binary-loose` and pair it with `--registry` to filter hits that actually correspond to COM registrations.
 
-### `parse`
+---
 
-Produces:
+## Extending quuid
 
-* Braced string (from `StringFromGUID2`)
-* Dashed string
-* Field breakdown (`Data1/Data2/Data3/Data4`)
-* C initializer
-* Raw bytes as stored in memory (little-endian fields)
+Natural next additions that fit the current architecture:
 
-This is useful for:
+* Output formats tailored for assembly macro ingestion (`define GUID.NAME ...` / `db` / `dq`)
+* Raw GUID scanning for alternate byte orders (wire/network order) as an explicit mode
+* Optional reparse traversal with loop detection
+* JSON output mode for toolchain integration
 
-* Writing constants into C/C++
-* Emitting `db` sequences for assemblers
-* Debugging endianness mismatches
-
-### `find`
-
-Prints only categories that exist (CLSID / IID / TypeLib / AppID). If there are no hits:
-
-```text
-(no HKCR hits in CLSID/Interface/TypeLib/AppID)
-```
-
-### `scan`
-
-Reports:
-
-* total files scanned
-* total bytes scanned
-* raw matches found (may include duplicates)
-* unique GUIDs (deduplicated)
-
-Then prints unique GUIDs; with `--registry` it prints registry hits per GUID.
-
-### `tlb`
-
-Prints LIBID and then each type’s GUID, kind (interface/coclass/etc), and name if available.
-
-## Limitations (current)
-
-* Scanning detects only **ASCII textual GUIDs** (36-char dashed or 38-char braced).
-
-  * It does **not** currently detect raw 16-byte GUID structures.
-* Directory traversal uses Win32 `FindFirstFileW`/`FindNextFileW` and does not special-case symlink loops.
-* Scanning uses memory-mapped I/O; extremely large files may be slow or pressure address space.
-
-## Roadmap ideas
-
-* Raw 16-byte GUID scanning with heuristics (RFC4122 version/variant filtering + context scoring)
-* Scan “server path” binaries for additional GUIDs (CLSID → InprocServer32 → scan)
-* WOW6432Node / HKLM deltas to compare 32-bit vs 64-bit registrations
-* Output formatting modes suitable for macro ingestion (e.g., `define GUID.NAME {...}` or `db` blocks)
-* JSON output for automation pipelines
+---
 
 ## License
 
-Unlicensed / public domain intent (adjust to your preferred license before publishing).
+Unlicensed / public domain intent
 
-## Contributing
-
-Keep it simple:
-
-* single-file C source preferred
-* add features behind new subcommands or flags
-* avoid dependencies beyond Win32/OLE APIs
-* test on clean VMs (registry state matters)
-
-## Security / safety notes
-
-* `scan` is read-only. It opens files for reading with sharing enabled.
-* `--registry` reads COM registration data from HKCR; results are system-dependent.
-
-## Why this exists
-
-When doing low-level Windows/COM work you often see GUIDs in:
-
-* registry dumps
-* PE resources and strings
-* type libraries
-* debugger output
-* COM interface declarations (IDL)
-
-`quuid` gives you a fast way to turn “random GUID noise” into structured meaning and a path to the corresponding COM registration footprint.
+* Initial implementation drafted with AI assistance
+* ChatGPT 5.2 Thinking (OpenAI), < 5 min.
