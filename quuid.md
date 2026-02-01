@@ -170,6 +170,20 @@ quuid tlb C:\Windows\System32\stdole2.tlb
 
 ---
 
+## Why this exists
+
+When doing low-level Windows/COM work you often see GUIDs in:
+
+* registry dumps
+* PE resources and strings
+* type libraries
+* debugger output
+* COM interface declarations (IDL)
+
+`quuid` gives you a fast way to turn “random GUID noise” into structured meaning and a path to the corresponding COM registration footprint.
+
+---
+
 ## Extending quuid
 
 Natural next additions that fit the current architecture:

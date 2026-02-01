@@ -229,10 +229,10 @@ static void print_guid_forms(const GUID* g, int one_line) {
     wprintf(L"  braced : %ls\n", s);
     wprintf(L"  dashed : %ls\n", plain);
 
-    wprintf(L"  fields : Data1=0x%08lX Data2=0x%04X Data3=0x%04X Data4=%02X%02X-%02X%02X%02X%02X%02X%02X\n",
+    wprintf(L"  fields : Data1=0x%08lX Data2=0x%04X Data3=0x%04X Data4=0x%02X,0x%02X,0x%02X,0x%02X,0x%02X,0x%02X,0x%02X,0x%02X\n",
         (unsigned long)g->Data1, g->Data2, g->Data3,
-        g->Data4[0], g->Data4[1],
-        g->Data4[2], g->Data4[3], g->Data4[4], g->Data4[5], g->Data4[6], g->Data4[7]);
+        g->Data4[0], g->Data4[1], g->Data4[2], g->Data4[3],
+        g->Data4[4], g->Data4[5], g->Data4[6], g->Data4[7]);
 
     wprintf(L"  C init : {0x%08lX, 0x%04X, 0x%04X, {0x%02X,0x%02X,0x%02X,0x%02X,0x%02X,0x%02X,0x%02X,0x%02X}}\n",
         (unsigned long)g->Data1, g->Data2, g->Data3,
@@ -241,10 +241,15 @@ static void print_guid_forms(const GUID* g, int one_line) {
 
     unsigned char bytes[16];
     memcpy(bytes, g, 16);
+
     wprintf(L"  db     : ");
     for (int i = 0; i < 16; i++) {
         wprintf(L"0x%02X%s", bytes[i], (i == 15) ? L"" : L",");
     }
+    wprintf(L"\n");
+
+    wprintf(L"  ddq    : 0x");
+    for (int i = 15; i >= 0; i--) wprintf(L"%02X", bytes[i]);
     wprintf(L"\n");
 }
 
