@@ -145,7 +145,7 @@ quuid scan C:\Windows\System32 --binary
 ### Pivot CLSID → server module, then scan the module
 
 ```bat
-quuid server {XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX} --scan --binary --registry --both-views
+quuid server {00021401-0000-0000-C000-000000000046} --scan --binary --registry --both-views
 ```
 
 ### Enumerate first 50 CLSIDs (with names)
