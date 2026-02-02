@@ -1,253 +1,339 @@
 # errnfo
 
-`errnfo` is a small Windows CLI for decoding and formatting Windows error values across the most common numbering spaces:
+`errnfo` is a small Windows CLI that helps you **decode error numbers quickly** and **extend message lookup** using additional message-table modules (`RT_MESSAGETABLE`). It is designed for the common workflow:
 
-- **WIN32** (`GetLastError()` / `DWORD`)
-- **NTSTATUS**
-- **HRESULT**
+- you have a number (HRESULT / NTSTATUS / Win32 error),
+- you usually know the “source class”,
+- you want an immediate explanation (and useful structure like facility/severity),
+- and when the system table doesn’t have the text, you want to pull messages from the relevant DLLs without building a whole debugger pipeline.
 
-It supports explicit “source tags” (recommended) and a heuristic mode when the input is ambiguous.
+`errnfo` supports three modes:
 
-## Why this exists
-
-Windows has multiple error ecosystems (WIN32, NTSTATUS, HRESULT, and many facility/subsystem families). A single 32-bit number can be valid in more than one space, so the tool treats the domain as a first-class concept.
-
-`errnfo` is built around two ideas:
-
-1. **Tagged interpretation**: `errnfo nt 0xC0000241` is unambiguous.
-2. **Extensible message sources**: error text can live in the **system message table** or in **message-table resources embedded in DLLs** that you can load and query with `FormatMessage`. :contentReference[oaicite:0]{index=0}
+- **decode** (default): interpret a number with a tag (`hr`, `nt`, `w32`, etc.), or heuristically show several interpretations.
+- **scan**: discover binaries that contain message tables (to build your own module list).
+- **dump**: inspect a single module’s message-table contents (including listing message IDs/strings with filters).
 
 ---
 
 ## Quick start
 
-### Build
+### Decode (the main feature)
 
-**MSVC**
-```bat
-cl /nologo /W4 /O2 /DUNICODE /D_UNICODE errnfo.c
-````
-
-**clang-cl**
-
-```bat
-clang-cl /nologo /W4 /O2 /DUNICODE /D_UNICODE errnfo.c
-```
-
-**clang (MSVC environment)**
-
-```bat
-clang -O2 -Wall -Wextra -DUNICODE -D_UNICODE errnfo.c -o errnfo.exe
-```
-
-> If you build with a MinGW toolchain and want wide entry points, you may need `-municode`.
-
-### Use
-
-```text
-errnfo [options] <tag> <value>
-errnfo [options] <value>          (heuristic: show HR + NT + W32)
-```
-
-Examples:
+Terse “tag + number” form:
 
 ```bat
 errnfo hr 0x8034001B
 errnfo nt 0xC0000241
 errnfo w32 5
+````
+
+Heuristic “number only” form:
+
+```bat
 errnfo 0xC0000241
 ```
 
+This prints blocks for **HRESULT**, **NTSTATUS**, and **WIN32** so you can quickly see which one matches your context.
+
+### Add message modules (better text coverage)
+
+When a message isn’t in the system message table, it may exist in the **module that defines it** (or a related subsystem DLL). Add one or more modules:
+
+```bat
+errnfo w32 12029 -m wininet.dll
+errnfo hr  0x80070005 -m netmsg.dll
+errnfo hr  0x887A0005 -m dxgi.dll -m d3d12.dll
+```
+
+`-m/--module` is repeatable. You can keep a personal list in a script or by pasting from `scan` output.
+
 ---
 
-## Tags (domains and environment presets)
+## Why this tool exists
 
-Base domains:
+Windows errors are represented in several common formats:
 
-* `hr` / `hresult`  → interpret as HRESULT
-* `nt` / `ntstatus` → interpret as NTSTATUS
-* `w32` / `win32`   → interpret as Win32 error (`DWORD`)
+* **Win32** error codes (e.g. from `GetLastError`)
+* **HRESULT** (COM, DirectX, many APIs)
+* **NTSTATUS** (native/NT layer, kernel/user boundary)
 
-Environment tags (optional, user-tunable):
+Even when the numeric value is known, message text may be stored in different places:
 
-* `dx` → interpret as HRESULT, but also try DirectX-related DLLs as message sources (example preset)
+* the **system** message table
+* a **module’s message-table resource** (`RT_MESSAGETABLE`)
+* or nowhere (in which case only structure and derived forms help)
 
-List available tags:
+`errnfo` focuses on:
+
+1. **fast decode**, 2) **message lookup**, 3) **making your environment reusable**.
+
+---
+
+## Mode 1: decode (default)
+
+### Syntax
+
+```text
+errnfo [decode-options] <tag> <value>
+errnfo [decode-options] <value>
+```
+
+### Tags
+
+Common tags:
+
+* `hr`, `hresult` — interpret as HRESULT
+* `nt`, `ntstatus` — interpret as NTSTATUS
+* `w32`, `win32` — interpret as Win32 error code
+* `dx` — interpret as HRESULT and also try common DirectX-related modules for message text
+
+List all tags:
 
 ```bat
 errnfo --list-tags
 ```
 
+### Output structure
+
+Decode output is intentionally structured:
+
+* **value** in hex/decimal/signed
+* **severity** and **facility** breakdown (for HRESULT/NTSTATUS)
+* **message text** (if available)
+* **derived forms** where useful:
+
+  * `HRESULT_FROM_WIN32` embedded Win32 message
+  * NTSTATUS-derived HRESULT and Win32 (via `RtlNtStatusToDosError` when available)
+
+This makes it practical even when message text is missing.
+
+### Decode options
+
+```text
+-m, --module <dll-or-path>    Add message-table module (repeatable)
+    --lang <id>               Language ID for FormatMessage (decode). Default: 0 (user default)
+    --no-common               Disable built-in common module list
+    --list-tags               List tags
+-h, --help                    Help
+```
+
+`--lang` uses Windows LANGID values such as `0x409` (en-US).
+
 ---
 
-## Options
+## Mode 2: scan (discovery)
 
-### `-m <dll-or-path>` / `--module <dll-or-path>`
+`scan` finds files that contain `RT_MESSAGETABLE` resources. This is for building a personal or project-specific list of modules you commonly care about.
 
-Add a message-table module to try (repeatable). This is the primary “make it your own” mechanism.
+### Syntax
+
+```text
+errnfo scan <dir> [--recursive] [--paths] [--verbose]
+```
+
+### Examples
+
+Create a pasteable module list:
 
 ```bat
-errnfo w32 2103 -m netmsg.dll
+errnfo scan C:\Windows\System32 --recursive > msgmods.txt
+```
+
+Output looks like:
+
+```text
+-m "C:\Windows\System32\netmsg.dll"
+-m "C:\Windows\System32\wininet.dll"
+...
+```
+
+Paths only:
+
+```bat
+errnfo scan C:\Windows\System32 --paths > msgmods_paths.txt
+```
+
+### Notes
+
+* `scan` is discovery only: it does **not** dump message strings (that belongs in `dump`).
+* Windows contains more message-table modules than most people expect (languages, MUIs, side-by-side components). `scan` helps you find what matters in *your* environment.
+
+---
+
+## Mode 3: dump (module inspection)
+
+`dump` is a **single-module** inspection tool for message tables. Use it when you want to see:
+
+* which message tables exist,
+* which languages they contain,
+* the ID ranges stored in blocks,
+* and optionally the messages themselves.
+
+This mode is designed to avoid output floods by supporting filters.
+
+### Syntax
+
+```text
+errnfo dump <module-or-path> [--tables] [--langs] [--list]
+                         [--lang <id>]
+                         [--id-min <n>] [--id-max <n>]
+                         [--grep <substr>]
+                         [--max <n>]
+                         [--verbose]
+```
+
+### Defaults
+
+If you don’t specify `--tables/--langs/--list`, `dump` defaults to **`--tables`**.
+
+### Examples
+
+Show message tables and their block counts:
+
+```bat
+errnfo dump netmsg.dll --tables
+```
+
+Show resource languages present in the module:
+
+```bat
+errnfo dump wininet.dll --langs
+```
+
+List messages but filter aggressively:
+
+```bat
+errnfo dump wininet.dll --list --grep timeout --max 50
+```
+
+Only dump one resource language (resource language filtering):
+
+```bat
+errnfo dump ntdll.dll --list --lang 0x409 --id-min 0xC0000000 --id-max 0xC0000300
+```
+
+### Filters (recommended when using `--list`)
+
+* `--lang 0x409` limits output to one **resource language**
+* `--id-min / --id-max` limits the ID range
+* `--grep` substring filter on message text (case-insensitive)
+* `--max` caps the number of printed entries
+
+---
+
+## Extensibility and customization
+
+### Add your own tags
+
+Tags are implemented as a small table:
+
+* a tag name (string)
+* a help string
+* a handler function
+
+Add a new tag by:
+
+1. defining a handler (similar to `tag_dx`)
+2. optionally creating a `MODLIST` for tag-specific default modules
+3. adding an entry to the `g_tags[]` array
+
+This makes it easy to create environment-specific workflows:
+
+* graphics (`dx`)
+* networking (`net`)
+* setup/driver (`setup`)
+* security (`sec`)
+* etc.
+
+### Build your own module list
+
+The recommended workflow:
+
+1. Run scan:
+
+```bat
+errnfo scan C:\Windows\System32 --recursive > msgmods.txt
+```
+
+2. Prune the list to what matters to you (keep it small).
+
+3. Use it in your shell scripts or build environments:
+
+```bat
+for /f "usebackq delims=" %L in ("msgmods.txt") do @echo %L
+```
+
+Or paste the relevant `-m` lines into your own wrapper script.
+
+---
+
+## Practical coverage expectations
+
+`errnfo` does well when:
+
+* the error class is known (HRESULT/NTSTATUS/WIN32),
+* and message text exists in either:
+
+  * the system message table, or
+  * a module message table you include via `-m`.
+
+It will still provide value when message text does not exist:
+
+* facility/severity/code breakdown
+* derived forms (e.g., NTSTATUS → Win32)
+
+Some systems return richer context out-of-band (e.g., COM `IErrorInfo`, protocol-specific “last response” text). Those are intentionally out of scope for this tool’s first version.
+
+---
+
+## Build notes
+
+`errnfo.c` is a single-file build with Win32 APIs.
+
+Examples:
+
+```bat
+cl /nologo /W4 /O2 /DUNICODE /D_UNICODE errnfo.c
+clang-cl /nologo /W4 /O2 /DUNICODE /D_UNICODE errnfo.c
+clang -march=native -O3 -DUNICODE -D_UNICODE errnfo.c
+```
+
+---
+
+## Help
+
+```bat
+errnfo --help
+```
+
+---
+
+## Suggested workflow patterns
+
+### 1) Quick decode while debugging
+
+```bat
+errnfo hr %ERRORLEVEL%
+```
+
+### 2) Add one module when you know the subsystem
+
+```bat
 errnfo w32 12029 -m wininet.dll
-errnfo hr  0x887A0005 -m dxgi.dll -m d3d12.dll
 ```
 
-Why this matters: `FormatMessage` can format strings from the **system message table** or from a **message-table resource in a loaded module**. ([Microsoft Learn][1])
-
-### `--lang <id>`
-
-Use a specific language id for message lookup (e.g. `0x409` for en-US). `FormatMessage` selects messages by **message id + language id**. ([Microsoft Learn][1])
+### 3) Build an environment list once
 
 ```bat
-errnfo --lang 0x409 w32 5
+errnfo scan C:\Windows\System32 --recursive > msgmods.txt
 ```
 
-### `--no-common`
-
-Disable the built-in “common module list”.
-
-### `-h` / `--help`
-
-Show help.
-
----
-
-## Message resolution policy
-
-Message strings are retrieved via `FormatMessageW`. ([Microsoft Learn][1])
-
-### WIN32 (`w32`)
-
-1. System message table
-2. Tag-default modules (if the tag defines any)
-3. User `-m/--module` modules
-4. Built-in common modules (unless `--no-common`)
-
-### HRESULT (`hr`)
-
-1. System message table for the HRESULT value
-2. If it matches `HRESULT_FROM_WIN32` pattern (`0x80070000 | e`), also show the embedded Win32 message
-3. Then: tag/user/common modules as additional sources (same ordering as above)
-
-### NTSTATUS (`nt`)
-
-1. `ntdll.dll` message table (many NTSTATUS values live here)
-2. Then: tag/user/common modules
-3. Convert to Win32 via `RtlNtStatusToDosError` and show the Win32 message
-
-`RtlNtStatusToDosError` converts an NTSTATUS to the closest Win32 error (and can return `ERROR_MR_MID_NOT_FOUND` if there is no mapping). ([ntdoc.m417z.com][2])
-
----
-
-## Bitfield breakdowns (what you’ll see)
-
-### HRESULT
-
-`errnfo` prints:
-
-* severity bit (`S`)
-* customer bit (`C`)
-* NT marker bit (`N`)
-* facility
-* code
-
-The layout and semantics match the published Windows error-numbering documentation. ([Microsoft Learn][3])
-
-If the HRESULT has the NT marker set, `errnfo` also prints a derived NTSTATUS (by clearing `FACILITY_NT_BIT`).
-
-The documented mapping is:
-
-```c
-HRESULT_FROM_NT(x) == (x | FACILITY_NT_BIT)
-```
-
-([Microsoft Learn][4])
-
-### NTSTATUS
-
-`errnfo` prints:
-
-* severity (2-bit)
-* customer bit
-* facility
-* code
-* derived HRESULT (`HRESULT_FROM_NT`)
-* derived Win32 (`RtlNtStatusToDosError`)
-
-NTSTATUS/HRESULT numbering-space relationships are documented in the same reference. ([Microsoft Learn][3])
-
----
-
-## Extensibility: adding your own tag
-
-Tags are designed to be added by editing only a small, obvious section in the source:
-
-1. **Define a per-tag default module list** (optional)
-2. **Write a tag handler** (usually 5–10 lines)
-3. **Register the tag** in `g_tags[]`
-
-### Example: add a `myenv` tag that treats input as HRESULT and tries extra DLLs
-
-1. Declare a module list:
-
-```c
-static MODLIST g_myenvMods;
-```
-
-2. Populate it in `init_tag_modules()`:
-
-```c
-modlist_add(&g_myenvMods, L"foo.dll", L"foo.dll");
-modlist_add(&g_myenvMods, L"bar.dll", L"bar.dll");
-```
-
-3. Add the handler:
-
-```c
-static int tag_myenv(TAGCTX *t, int argc, wchar_t **argv) {
-    if (argc < 1) return -1;
-    uint32_t v = 0;
-    if (!parse_u32(argv[0], &v)) return -2;
-    print_hresult(t->ctx, v, &g_myenvMods);
-    return 0;
-}
-```
-
-4. Register it:
-
-```c
-{ L"myenv", L"Interpret as HRESULT + try foo/bar modules", tag_myenv },
-```
-
-That’s it. No other plumbing changes required.
-
----
-
-## Customizing the “common module list”
-
-The tool contains a small `g_common_module_specs[]` array intended to be edited to match a user’s environment (typical choices depend on what you work with: networking, setup/configuration, graphics, etc.).
-
-* It is tried **after** system/tag/user sources.
-* Load failures are warnings and do not stop execution.
-* Disable with `--no-common`.
-
----
-
-## Heuristic mode (when you omit the tag)
-
-If you run:
+### 4) Inspect a module before adding it
 
 ```bat
-errnfo 0xC0000241
+errnfo dump wininet.dll --tables
+errnfo dump wininet.dll --list --grep timeout --max 20
 ```
-
-`errnfo` will print three interpretations:
-
-* as HRESULT
-* as NTSTATUS
-* as Win32
-
-Heuristic mode is meant for quick exploration; it does not guess the “true” domain.
 
 ---
 
@@ -273,10 +359,3 @@ Unlicensed / public domain intent
 
 * Initial implementation drafted with AI assistance
 * ChatGPT 5.2 Thinking (OpenAI), < 5 min.
-
-
-[1]: https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-formatmessagew?utm_source=chatgpt.com "FormatMessageW function (winbase.h) - Win32 apps"
-[2]: https://ntdoc.m417z.com/rtlntstatustodoserror?utm_source=chatgpt.com "RtlNtStatusToDosError - NtDoc"
-[3]: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-erref/0642cb2f-2075-4469-918c-4441e69c548a?utm_source=chatgpt.com "[MS-ERREF]: HRESULT"
-[4]: https://learn.microsoft.com/en-us/windows/win32/api/winerror/nf-winerror-hresult_from_nt?utm_source=chatgpt.com "HRESULT_FROM_NT macro (winerror.h) - Win32 apps"
-
