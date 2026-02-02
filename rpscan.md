@@ -46,6 +46,7 @@ rpscan <path> [--recursive] [--max-depth N]
 
 - Reparse points are reported; **directories that are reparse points are not traversed**.
 - Without `--recursive`, only **immediate children** are scanned when `<path>` is a directory.
+- `--max-depth` only applies when `--recursive` is set.
 
 ---
 

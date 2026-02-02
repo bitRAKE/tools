@@ -100,6 +100,14 @@ quuid enum   clsid|iid|typelib|appid [--limit N] [--with-name]
 
 ## Examples
 
+### PowerShell note
+
+PowerShell treats `{...}` as a script block. Quote braced GUIDs:
+
+```bat
+quuid find "{00021401-0000-0000-C000-000000000046}" --wow64
+```
+
 ### Parse a GUID
 
 ```bat
