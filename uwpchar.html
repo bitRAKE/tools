@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>uwpchar (web) — Segoe icon browser</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --bg: #0f1114;
+      --panel: #171a1f;
+      --panel-2: #1e2229;
+      --text: #e8e9ee;
+      --muted: #9aa3b2;
+      --accent: #4aa3ff;
+      --grid: #252b33;
+      --chip: #222833;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font: 14px/1.3 "Segoe UI", system-ui, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: var(--left, 320px) 8px 1fr;
+      gap: 14px;
+      padding: 14px;
+      height: 100%;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid #202631;
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      height: 100%;
+    }
+    .panel .block {
+      background: var(--panel-2);
+      border: 1px solid #242b36;
+      border-radius: 8px;
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+    }
+    label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    select, input, textarea, button {
+      font: inherit;
+      color: var(--text);
+      background: #0f131a;
+      border: 1px solid #27303b;
+      border-radius: 6px;
+      padding: 8px 10px;
+    }
+    button {
+      background: #1c2733;
+      cursor: pointer;
+    }
+    button:hover { border-color: #3c4757; }
+    textarea {
+      resize: none;
+      min-height: 160px;
+      font-family: "Consolas", "Cascadia Mono", ui-monospace, SFMono-Regular, monospace;
+      overflow: auto;
+      white-space: pre;
+    }
+    .grid {
+      background: var(--panel);
+      border: 1px solid #202631;
+      border-radius: 10px;
+      height: 100%;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 10px;
+    }
+    .splitter {
+      width: 8px;
+      cursor: col-resize;
+      background: linear-gradient(180deg, #11161d, #141a22);
+      border: 1px solid #202631;
+      border-radius: 6px;
+    }
+    .grid-inner {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+      gap: 10px;
+    }
+    .glyph {
+      background: var(--chip);
+      border: 1px solid var(--grid);
+      border-radius: 8px;
+      padding: 10px 8px;
+      text-align: center;
+      cursor: pointer;
+      user-select: none;
+    }
+    .glyph:hover { border-color: var(--accent); }
+    .glyph .char { display: block; }
+    .glyph .cp { font-size: 11px; color: var(--muted); margin-top: 6px; }
+    .glyph .name { font-size: 10px; color: #b8c0ce; margin-top: 2px; }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .pill {
+      background: #10151c;
+      border: 1px solid #28313d;
+      border-radius: 999px;
+      padding: 6px 10px;
+      color: var(--muted);
+      font-size: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <div class="panel" id="leftPanel">
+      <div class="block">
+        <label for="font">Font</label>
+        <select id="font">
+          <option value="Segoe MDL2 Assets">Segoe MDL2 Assets</option>
+          <option value="Segoe Fluent Icons" selected>Segoe Fluent Icons</option>
+        </select>
+        <label for="size">Size</label>
+        <select id="size">
+          <option>16</option>
+          <option>20</option>
+          <option selected>24</option>
+          <option>32</option>
+          <option>40</option>
+          <option>48</option>
+          <option>64</option>
+        </select>
+        <label for="format">Format</label>
+        <select id="format">
+          <option selected>C</option>
+          <option>C++</option>
+          <option>ASM</option>
+          <option>C#</option>
+          <option>JSON</option>
+          <option>Text</option>
+        </select>
+        <label for="filter">Filter (name or U+XXXX)</label>
+        <input id="filter" type="text" placeholder="arrow, wifi, U+E7..">
+        <div class="row">
+          <label class="pill"><input id="showNames" type="checkbox" checked>Show names</label>
+          <label class="pill"><input id="onlyNamed" type="checkbox" checked>Only named</label>
+        </div>
+      </div>
+
+      <div class="block">
+        <label>Output (click glyphs to append)</label>
+        <textarea id="out" wrap="off"></textarea>
+        <div class="row">
+          <button id="copy">Copy</button>
+          <button id="clear">Clear</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="splitter" id="splitter" title="Drag to resize"></div>
+
+    <div class="grid">
+      <div class="grid-inner" id="grid"></div>
+    </div>
+  </div>
+
+  <script>
+  const SOURCES = [
+    {
+      font: "Segoe MDL2 Assets",
+      url: "https://raw.githubusercontent.com/MicrosoftDocs/windows-dev-docs/docs/hub/apps/design/style/segoe-ui-symbol-font.md"
+    },
+    {
+      font: "Segoe Fluent Icons",
+      url: "https://raw.githubusercontent.com/MicrosoftDocs/windows-dev-docs/docs/hub/apps/design/style/segoe-fluent-icons-font.md"
+    }
+  ];
+
+  const state = {
+    tables: new Map(), // font -> [{code, name}]
+    glyphs: [],
+  };
+
+  const el = {
+    font: document.getElementById("font"),
+    size: document.getElementById("size"),
+    format: document.getElementById("format"),
+    filter: document.getElementById("filter"),
+    showNames: document.getElementById("showNames"),
+    onlyNamed: document.getElementById("onlyNamed"),
+    out: document.getElementById("out"),
+    grid: document.getElementById("grid"),
+    copy: document.getElementById("copy"),
+    clear: document.getElementById("clear"),
+  };
+
+  function parseMarkdownTables(md) {
+    const rows = [];
+    const lines = md.split(/\r?\n/);
+    const reRow = /^\s*\|(.+)\|\s*$/;
+    const reName = /:::no-loc\s+text="([^"]+)":::/;
+    const reHex = /\b[0-9a-fA-F]{4,6}\b/;
+    for (const line of lines) {
+      const m = reRow.exec(line);
+      if (!m) continue;
+      const cols = m[1].split("|").map(c => c.trim());
+      if (cols.length < 3) continue;
+      if (cols[0].toLowerCase().startsWith("glyph")) continue;
+      if (cols[1].toLowerCase().startsWith("unicode")) continue;
+      const hexm = reHex.exec(cols[1]);
+      const namem = reName.exec(cols[2]);
+      if (!hexm || !namem) continue;
+      rows.push({ code: parseInt(hexm[0], 16), name: namem[1] });
+    }
+    return rows;
+  }
+
+  async function loadTables() {
+    const results = await Promise.all(SOURCES.map(async s => {
+      const res = await fetch(s.url);
+      if (!res.ok) throw new Error(`Failed ${s.url}`);
+      const text = await res.text();
+      return { font: s.font, rows: parseMarkdownTables(text) };
+    }));
+    for (const r of results) {
+      state.tables.set(r.font, r.rows);
+    }
+  }
+
+  function formatLine(name, code, font) {
+    const hex = code.toString(16).toUpperCase().padStart(4, "0");
+    const fmt = el.format.value;
+    if (fmt === "C++") return `constexpr uint32_t ${name} = 0x${hex}; // ${font}`;
+    if (fmt === "ASM") return `${name} EQU 0${hex}h ; ${font}`;
+    if (fmt === "C#") return `public const int ${name} = 0x${hex}; // ${font}`;
+    if (fmt === "JSON") return `"${name}": "0x${hex}"`;
+    if (fmt === "Text") return `${name} 0x${hex} // ${font}`;
+    return `#define ${name} 0x${hex} // ${font}`;
+  }
+
+  function fallbackName(code) {
+    if (code >= 0xE000 && code <= 0xF8FF) return `ICON_${code.toString(16).toUpperCase()}`;
+    return `U_${code.toString(16).toUpperCase()}`;
+  }
+
+  function normalizeName(n) {
+    return n.replace(/[^A-Za-z0-9_ -]/g, "")
+            .replace(/[ -]+/g, "_")
+            .replace(/^(\d)/, "U_$1");
+  }
+
+  function buildGlyphs() {
+    const font = el.font.value;
+    const size = parseInt(el.size.value, 10);
+    const rows = state.tables.get(font) || [];
+    const map = new Map(rows.map(r => [r.code, r.name]));
+    const glyphs = [];
+
+    for (let code = 0x20; code <= 0xFFFD; code++) {
+      if (code >= 0xD800 && code <= 0xDFFF) continue;
+      const name = map.get(code) || "";
+      glyphs.push({ code, name });
+    }
+    state.glyphs = glyphs;
+
+    const test = document.createElement("span");
+    test.style.fontFamily = `"${font}"`;
+    test.style.fontSize = `${size}px`;
+    test.textContent = "A";
+  }
+
+  function renderGrid() {
+    const font = el.font.value;
+    const size = parseInt(el.size.value, 10);
+    const filter = el.filter.value.trim().toLowerCase();
+    const showNames = el.showNames.checked;
+    const onlyNamed = el.onlyNamed.checked;
+
+    el.grid.innerHTML = "";
+    const frag = document.createDocumentFragment();
+
+    for (const g of state.glyphs) {
+      const hex = g.code.toString(16).toUpperCase().padStart(4, "0");
+      const u = `U+${hex}`;
+      if (onlyNamed && !g.name) continue;
+      if (filter) {
+        if (!(g.name.toLowerCase().includes(filter) || u.toLowerCase().includes(filter))) {
+          continue;
+        }
+      }
+
+      const btn = document.createElement("div");
+      btn.className = "glyph";
+      btn.style.fontFamily = `"${font}"`;
+      btn.style.fontSize = `${size}px`;
+      btn.dataset.code = g.code;
+      btn.dataset.name = g.name || "";
+
+      const char = document.createElement("span");
+      char.className = "char";
+      char.textContent = String.fromCodePoint(g.code);
+      const cp = document.createElement("div");
+      cp.className = "cp";
+      cp.textContent = u;
+      btn.appendChild(char);
+      btn.appendChild(cp);
+
+      if (showNames && g.name) {
+        const nm = document.createElement("div");
+        nm.className = "name";
+        nm.textContent = g.name;
+        btn.appendChild(nm);
+      }
+
+      btn.addEventListener("click", () => {
+        const name = g.name ? normalizeName(g.name) : fallbackName(g.code);
+        const line = formatLine(name, g.code, font);
+        el.out.value = el.out.value ? `${el.out.value}\n${line}` : line;
+      });
+
+      frag.appendChild(btn);
+    }
+
+    el.grid.appendChild(frag);
+  }
+
+  function wireEvents() {
+    el.font.addEventListener("change", () => { buildGlyphs(); renderGrid(); });
+    el.size.addEventListener("change", renderGrid);
+    el.filter.addEventListener("input", renderGrid);
+    el.showNames.addEventListener("change", renderGrid);
+    el.onlyNamed.addEventListener("change", renderGrid);
+    el.format.addEventListener("change", () => {});
+    el.copy.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(el.out.value || "");
+    });
+    el.clear.addEventListener("click", () => { el.out.value = ""; });
+  }
+
+  function setupSplitter() {
+    const splitter = document.getElementById("splitter");
+    const leftPanel = document.getElementById("leftPanel");
+    let dragging = false;
+
+    const onMove = (e) => {
+      if (!dragging) return;
+      const rect = document.body.getBoundingClientRect();
+      let x = e.clientX - rect.left;
+      const min = 240;
+      const max = Math.max(min, rect.width - 280);
+      if (x < min) x = min;
+      if (x > max) x = max;
+      document.body.style.setProperty("--left", `${x}px`);
+    };
+
+    splitter.addEventListener("mousedown", (e) => {
+      dragging = true;
+      document.body.style.userSelect = "none";
+      onMove(e);
+    });
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", () => {
+      dragging = false;
+      document.body.style.userSelect = "";
+    });
+  }
+
+  (async function init() {
+    try {
+      await loadTables();
+      buildGlyphs();
+      renderGrid();
+      wireEvents();
+      setupSplitter();
+    } catch (err) {
+      console.error(err);
+    }
+  })();
+  </script>
+</body>
+</html>

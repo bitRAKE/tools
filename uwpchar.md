@@ -107,3 +107,17 @@ Rebuild the compiled name mapping from the Microsoft Docs markdown files:
 ```bat
 python uwpchar_extract_names.py --md segoe-ui-symbol-font.md --md segoe-fluent-icons-font.md --out uwpchar_names.h
 ```
+
+---
+
+## Web alternative
+
+A static HTML version is available at:
+
+- `uwpchar.html`
+
+Notes:
+
+- Loads the Microsoft Docs markdown tables directly from GitHub at runtime.
+- Requires a network connection and a browser that allows `fetch()` from `raw.githubusercontent.com`.
+- Defaults to `Segoe Fluent Icons` and named-only filtering.
