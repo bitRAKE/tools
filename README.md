@@ -13,6 +13,7 @@ A small collection of **single-file C CLI tools** for Windows. Each tool is desi
 - `modsnap` — snapshot a process module list (base, size, name, path) with table/CSV/path/count output.
 - `quuid` — GUID/COM discovery: parse, registry lookup, scan binaries, inspect type libraries.
 - `rpscan` — reparse-point scanner for paths (symlinks/junctions/mount points/etc.).
+- `wchain` — inspect per-thread wait chains (WCT) to report blocked/waiting threads and wait cycles.
 
 ## Out Of Scope (Transient)
 
