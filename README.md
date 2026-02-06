@@ -14,6 +14,10 @@ A small collection of **single-file C CLI tools** for Windows. Each tool is desi
 - `quuid` — GUID/COM discovery: parse, registry lookup, scan binaries, inspect type libraries.
 - `rpscan` — reparse-point scanner for paths (symlinks/junctions/mount points/etc.).
 
+## Out Of Scope (Transient)
+
+- `uwpchar` — Windows GUI icon-font browser/export utility. This is intentionally outside the CLI scope of this repo and is likely temporary; if similar tools accumulate, they should migrate to a separate repo.
+
 ## Build
 
 Each tool is a single C file. Example (MSVC):
