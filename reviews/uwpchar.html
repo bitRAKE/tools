@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tool Review: uwpchar</title>
+  <style>
+    body { font-family: "Segoe UI", Arial, sans-serif; margin: 2rem auto; max-width: 900px; line-height: 1.5; color: #1f2937; }
+    h1, h2 { color: #111827; }
+    code { background: #f3f4f6; padding: 0.1rem 0.3rem; border-radius: 4px; }
+    .verdict { padding: 0.75rem 1rem; background: #fff1f2; border-left: 4px solid #e11d48; }
+  </style>
+</head>
+<body>
+  <article>
+    <h1>Tool Review: uwpchar</h1>
+    <p><strong>Date:</strong> February 6, 2026</p>
+    <p class="verdict"><strong>Executive verdict:</strong> <code>uwpchar</code> is a useful niche GUI utility for icon-font exploration, but it is outside this repo's CLI scope. It should be treated as a migration candidate or learning-example artifact.</p>
+
+    <h2>What It Does Well</h2>
+    <ul>
+      <li>Fast visual browsing for MDL2/Fluent icon fonts with practical size previews.</li>
+      <li>Convenient click-to-export workflow for generated <code>#define</code>-style constants.</li>
+      <li>Single-file Win32 implementation is compact and easy to rebuild.</li>
+      <li>Includes an HTML companion path (<code>uwpchar.html</code>) for lightweight web use.</li>
+    </ul>
+
+    <h2>Limitations and Risks</h2>
+    <ul>
+      <li>Not a CLI tool, so it does not align with this repository's primary scope.</li>
+      <li>Manual GUI workflow is hard to automate for CI or scripted asset pipelines.</li>
+      <li>Depends on local font availability and desktop interaction context.</li>
+      <li>No machine-readable export contract beyond clipboard/editor text.</li>
+    </ul>
+
+    <h2>Alternatives and Tradeoffs</h2>
+    <ul>
+      <li><strong>Fluent icon galleries and docs:</strong> often enough for lookup, but less integrated for custom export snippets.</li>
+      <li><strong>Design tools (Figma, IDE pickers, XAML tooling):</strong> stronger for UI design workflows, less lightweight as a local utility.</li>
+      <li><strong>Custom scripts over glyph tables:</strong> better for automation, weaker for visual discovery.</li>
+    </ul>
+    <p>For many teams, this category is already covered by design tools and documentation sites. In that sense, it is closer to a convenience/learning tool than a core systems utility.</p>
+
+    <h2>Workflow Fit</h2>
+    <ul>
+      <li><strong>UI prototyping:</strong> helpful for quick icon exploration and copy/paste output.</li>
+      <li><strong>Engineering automation:</strong> weak fit because it is interaction-first.</li>
+      <li><strong>Repo governance:</strong> better suited to a GUI-focused companion repo than this CLI-centric one.</li>
+    </ul>
+
+    <h2>Evidence Snapshot</h2>
+    <ul>
+      <li>Tool launched successfully as a desktop process (verified by live PID after start).</li>
+      <li>Documentation confirms workflow is GUI-driven and not command-oriented.</li>
+      <li>README already labels it as out-of-scope and likely transient.</li>
+    </ul>
+
+    <h2>Final Recommendation</h2>
+    <p><strong>Recommendation: deprecate from this repo scope (migrate).</strong> Keep short-term as a learning/example utility, but move to a GUI utility repo if retained long-term.</p>
+  </article>
+</body>
+</html>

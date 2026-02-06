@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tool Review: modsnap</title>
+  <style>
+    body { font-family: "Segoe UI", Arial, sans-serif; margin: 2rem auto; max-width: 900px; line-height: 1.5; color: #1f2937; }
+    h1, h2 { color: #111827; }
+    code { background: #f3f4f6; padding: 0.1rem 0.3rem; border-radius: 4px; }
+    .verdict { padding: 0.75rem 1rem; background: #f0fdf4; border-left: 4px solid #16a34a; }
+  </style>
+</head>
+<body>
+  <article>
+    <h1>Tool Review: modsnap</h1>
+    <p><strong>Date:</strong> February 6, 2026</p>
+    <p class="verdict"><strong>Executive verdict:</strong> <code>modsnap</code> is a simple and useful script surface for module inventory, but much of its functionality overlaps with debuggers and process tools. Its value is speed and scriptability, not depth.</p>
+
+    <h2>What It Does Well</h2>
+    <ul>
+      <li>Fast module snapshot for a PID with minimal dependencies.</li>
+      <li>Good output modes for scripts: <code>--paths</code>, <code>--csv</code>, <code>--count</code>.</li>
+      <li>Clear defaults and small operational surface area.</li>
+    </ul>
+
+    <h2>Limitations and Risks</h2>
+    <ul>
+      <li>Single snapshot only; no diffs or time-series tracking.</li>
+      <li>No filtering, sorting, signer data, version info, or load-order context.</li>
+      <li>Cross-bitness and protected-process restrictions still apply to ToolHelp snapshots.</li>
+      <li>Output can be large for high-module processes without built-in narrowing.</li>
+    </ul>
+
+    <h2>Alternatives and Tradeoffs</h2>
+    <ul>
+      <li><strong>Process Explorer / Process Hacker:</strong> richer interactive module diagnostics, but less batch-friendly.</li>
+      <li><strong>WinDbg (<code>lm</code>):</strong> deep introspection, symbols, and memory context, but requires debugger workflow.</li>
+      <li><strong>PowerShell <code>Get-Process ... .Modules</code>:</strong> built-in scripting path, but not as direct or consistent for all scenarios.</li>
+      <li><strong><code>tasklist /m</code>:</strong> native and present everywhere, but less structured and less complete for paths/details.</li>
+    </ul>
+    <p>In an IDE/debugger-centric workflow, <code>modsnap</code> is somewhat superfluous. In scripted diagnostics, it is useful.</p>
+
+    <h2>Workflow Fit</h2>
+    <ul>
+      <li><strong>Local debugging:</strong> quick pre-debug snapshot, especially when you do not want to attach a debugger.</li>
+      <li><strong>Incident/forensics:</strong> useful for collecting baseline module lists from suspect processes.</li>
+      <li><strong>Automation:</strong> good fit due to deterministic text/CSV output.</li>
+    </ul>
+
+    <h2>Evidence Snapshot</h2>
+    <ul>
+      <li><code>modsnap --self --count</code> returned a stable module count.</li>
+      <li><code>modsnap --self --csv</code> produced parseable rows with pid/base/size/module/path.</li>
+      <li><code>modsnap --pid $PID --paths</code> returned a long, realistic dependency list for PowerShell host.</li>
+    </ul>
+
+    <h2>Final Recommendation</h2>
+    <p><strong>Recommendation: improve.</strong> Keep it as a lightweight module inventory primitive and add sorting/filtering plus optional JSON output.</p>
+  </article>
+</body>
+</html>

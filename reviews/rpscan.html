@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tool Review: rpscan</title>
+  <style>
+    body { font-family: "Segoe UI", Arial, sans-serif; margin: 2rem auto; max-width: 900px; line-height: 1.5; color: #1f2937; }
+    h1, h2 { color: #111827; }
+    code { background: #f3f4f6; padding: 0.1rem 0.3rem; border-radius: 4px; }
+    .verdict { padding: 0.75rem 1rem; background: #fffbeb; border-left: 4px solid #d97706; }
+  </style>
+</head>
+<body>
+  <article>
+    <h1>Tool Review: rpscan</h1>
+    <p><strong>Date:</strong> February 6, 2026</p>
+    <p class="verdict"><strong>Executive verdict:</strong> <code>rpscan</code> is a practical pre-flight safety utility. It overlaps with native commands, but adds a cleaner scanning workflow and consistent output for automation.</p>
+
+    <h2>What It Does Well</h2>
+    <ul>
+      <li>Purpose is focused: detect reparse points before destructive file operations.</li>
+      <li>Supports recursive scan, path-only output, and summary stats in one command surface.</li>
+      <li>Skips traversing reparse directories by default, reducing loop risk.</li>
+      <li>Reports tag type and resolved target for common link/junction cases.</li>
+    </ul>
+
+    <h2>Limitations and Risks</h2>
+    <ul>
+      <li>No built-in policy mode (for example fail if any reparse points are found).</li>
+      <li>No per-tag filtering or richer metadata output.</li>
+      <li>Scope is narrow; it does one thing and depends on users to integrate it correctly.</li>
+      <li>Does not replace ACL, ownership, or broader path-safety auditing.</li>
+    </ul>
+
+    <h2>Alternatives and Tradeoffs</h2>
+    <ul>
+      <li><strong>PowerShell <code>Get-ChildItem -Attributes ReparsePoint -Recurse</code>:</strong> built-in and flexible, but less purpose-shaped output.</li>
+      <li><strong><code>dir /AL /S</code> and <code>fsutil reparsepoint query</code>:</strong> native and available, but fragmented into multiple commands.</li>
+      <li><strong>File explorers / IDEs:</strong> easy for one-off checks, weak for reproducible CI/scripting.</li>
+    </ul>
+    <p><code>rpscan</code> is somewhat replaceable by shell scripting, but still useful as a standardized command in operational runbooks.</p>
+
+    <h2>Workflow Fit</h2>
+    <ul>
+      <li><strong>Local development:</strong> useful before cleanup scripts and repo-wide deletes/moves.</li>
+      <li><strong>Deployment pipelines:</strong> good as a guard step before writing to user-provided paths.</li>
+      <li><strong>Forensics:</strong> supports quick discovery of link redirection in suspicious trees.</li>
+    </ul>
+
+    <h2>Evidence Snapshot</h2>
+    <ul>
+      <li>A fixture with a junction was created and detected: <code>MOUNT_POINT 0xA0000003 ...\j_target -&gt; ...\target</code>.</li>
+      <li><code>rpscan ... --recursive --paths</code> produced path-only machine-friendly output.</li>
+      <li><code>rpscan ... --recursive --stats</code> returned concise totals (<code>scanned</code>, <code>reparse</code>).</li>
+    </ul>
+
+    <h2>Final Recommendation</h2>
+    <p><strong>Recommendation: improve.</strong> Keep it, then add policy-oriented exit behavior and richer attribute/tag reporting for stronger CI usage.</p>
+  </article>
+</body>
+</html>

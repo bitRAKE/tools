@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tool Review: quuid</title>
+  <style>
+    body { font-family: "Segoe UI", Arial, sans-serif; margin: 2rem auto; max-width: 900px; line-height: 1.5; color: #1f2937; }
+    h1, h2 { color: #111827; }
+    code { background: #f3f4f6; padding: 0.1rem 0.3rem; border-radius: 4px; }
+    .verdict { padding: 0.75rem 1rem; background: #eff6ff; border-left: 4px solid #2563eb; }
+  </style>
+</head>
+<body>
+  <article>
+    <h1>Tool Review: quuid</h1>
+    <p><strong>Date:</strong> February 6, 2026</p>
+    <p class="verdict"><strong>Executive verdict:</strong> <code>quuid</code> is one of the highest-value tools in this repo. It unifies GUID parsing, COM registration lookup, binary scanning, and TypeLib inspection in one CLI. Some commands are noisy at scale, but the core concept is strong.</p>
+
+    <h2>What It Does Well</h2>
+    <ul>
+      <li>Combines multiple GUID investigation tasks that are usually spread across different tools.</li>
+      <li>Supports registry view control (<code>--wow32</code>/<code>--wow64</code>/<code>--both-views</code>), which matters for COM diagnostics.</li>
+      <li>Provides practical pivots like <code>server</code> (CLSID to module) and <code>tlb</code> inspection.</li>
+      <li>Scan modes support both high-signal ASCII detection and optional binary heuristics.</li>
+    </ul>
+
+    <h2>Limitations and Risks</h2>
+    <ul>
+      <li>Directory scans over large trees can be noisy and expensive.</li>
+      <li>Binary GUID scanning still has false-positive risk despite heuristics.</li>
+      <li>No JSON output for clean downstream automation.</li>
+      <li>Feature breadth can overwhelm users without a focused command recipe.</li>
+    </ul>
+
+    <h2>Alternatives and Tradeoffs</h2>
+    <ul>
+      <li><strong>OleView/OleViewDotNet + RegEdit:</strong> richer interactive COM analysis, weaker command-line repeatability.</li>
+      <li><strong>PowerShell + registry queries:</strong> scriptable, but requires custom glue for each investigation path.</li>
+      <li><strong>Debugger/IDE symbol views:</strong> useful during active debug sessions, but not for broad filesystem GUID hunting.</li>
+      <li><strong>Regex + custom scripts:</strong> easy to start, hard to keep coherent for COM-specific pivots.</li>
+    </ul>
+    <p><code>quuid</code> is not superfluous; it provides a cohesive workflow that common IDE/debugger features do not directly replace.</p>
+
+    <h2>Workflow Fit</h2>
+    <ul>
+      <li><strong>Local debugging:</strong> excellent for quickly understanding unknown GUIDs from logs/crashes.</li>
+      <li><strong>Forensics/reverse engineering:</strong> strong fit due to locate offsets and binary scan options.</li>
+      <li><strong>Automation:</strong> useful today, but stronger with structured output and scan limits.</li>
+    </ul>
+
+    <h2>Evidence Snapshot</h2>
+    <ul>
+      <li><code>quuid parse 6F9619FF-8B86-D011-B42D-00C04FC964FF</code> returned multiple canonical forms and byte layouts.</li>
+      <li><code>quuid find "{00021401-0000-0000-C000-000000000046}" --wow64</code> resolved CLSID/AppID metadata and module path.</li>
+      <li><code>quuid enum clsid --limit 5 --with-name</code> produced real registry inventory rows.</li>
+      <li><code>quuid tlb C:\Windows\System32\stdole2.tlb</code> extracted LIBID and type summaries.</li>
+      <li><code>quuid scan _test --locate --one-line</code> found embedded GUID patterns in fixture files.</li>
+    </ul>
+
+    <h2>Final Recommendation</h2>
+    <p><strong>Recommendation: keep and improve.</strong> Prioritize JSON output, scan limiting/filtering, and output presets for common forensic pipelines.</p>
+  </article>
+</body>
+</html>

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tool Review: errnfo</title>
+  <style>
+    body { font-family: "Segoe UI", Arial, sans-serif; margin: 2rem auto; max-width: 900px; line-height: 1.5; color: #1f2937; }
+    h1, h2 { color: #111827; }
+    code { background: #f3f4f6; padding: 0.1rem 0.3rem; border-radius: 4px; }
+    .verdict { padding: 0.75rem 1rem; background: #ecfeff; border-left: 4px solid #0891b2; }
+  </style>
+</head>
+<body>
+  <article>
+    <h1>Tool Review: errnfo</h1>
+    <p><strong>Date:</strong> February 6, 2026</p>
+    <p class="verdict"><strong>Executive verdict:</strong> <code>errnfo</code> is a legitimately useful CLI for Windows error triage and message-table discovery. It is not redundant with common shells, but it should add machine-readable output and curated module-list workflows.</p>
+
+    <h2>What It Does Well</h2>
+    <ul>
+      <li>Decodes HRESULT, NTSTATUS, and Win32 values in one tool with facility/severity breakdown.</li>
+      <li>Bridges a practical gap: system messages plus module-provided <code>RT_MESSAGETABLE</code> text from DLLs.</li>
+      <li>Includes two valuable operational modes beyond decode: <code>scan</code> (discovery) and <code>dump</code> (inspection/filtering).</li>
+      <li>Works well in shell workflows where a debugger is too heavy.</li>
+    </ul>
+
+    <h2>Limitations and Risks</h2>
+    <ul>
+      <li>No JSON output, so automation requires parsing human text.</li>
+      <li>Message quality still depends on module coverage and language resources on the local system.</li>
+      <li>Large scans can produce noisy output without curation.</li>
+      <li>Derived mappings (for example NTSTATUS to Win32) are convenience mappings, not semantic truth.</li>
+    </ul>
+
+    <h2>Alternatives and Tradeoffs</h2>
+    <ul>
+      <li><strong>WinDbg / debugger extensions:</strong> richer context while actively debugging, but slower for quick shell-level lookups.</li>
+      <li><strong>Microsoft <code>err.exe</code>:</strong> fast decoding, but lacks integrated message-table scan/dump workflows.</li>
+      <li><strong>PowerShell / ad hoc scripts:</strong> possible with <code>FormatMessage</code> wrappers, but usually fragmented and less reusable.</li>
+    </ul>
+    <p><code>errnfo</code> is not superfluous; it combines capabilities that are usually scattered across debugger commands and one-off scripts.</p>
+
+    <h2>Workflow Fit</h2>
+    <ul>
+      <li><strong>Local debugging:</strong> excellent for quick error interpretation without attaching tools.</li>
+      <li><strong>Incident response/forensics:</strong> useful when triaging logs with mixed error classes.</li>
+      <li><strong>CI/automation:</strong> promising, but limited today by non-structured output.</li>
+    </ul>
+
+    <h2>Evidence Snapshot</h2>
+    <ul>
+      <li><code>errnfo hr 0x8034001B</code> returned structured HRESULT fields plus message text.</li>
+      <li><code>errnfo nt 0xC0000241</code> showed NTSTATUS plus derived HRESULT/Win32 mapping.</li>
+      <li><code>errnfo w32 12029 -m wininet.dll</code> resolved message text from module resources.</li>
+      <li><code>errnfo scan C:\Windows\System32 --paths</code> quickly produced a module candidate list.</li>
+      <li><code>errnfo dump wininet.dll --list --grep connection --max 5</code> returned targeted message entries.</li>
+    </ul>
+
+    <h2>Final Recommendation</h2>
+    <p><strong>Recommendation: keep and improve.</strong> Priority improvements: <code>--json</code>, module-list file input, and quieter scan presets.</p>
+  </article>
+</body>
+</html>

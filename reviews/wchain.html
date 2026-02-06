@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tool Review: wchain</title>
+  <style>
+    body { font-family: "Segoe UI", Arial, sans-serif; margin: 2rem auto; max-width: 900px; line-height: 1.5; color: #1f2937; }
+    h1, h2 { color: #111827; }
+    code { background: #f3f4f6; padding: 0.1rem 0.3rem; border-radius: 4px; }
+    .verdict { padding: 0.75rem 1rem; background: #eef2ff; border-left: 4px solid #4f46e5; }
+  </style>
+</head>
+<body>
+  <article>
+    <h1>Tool Review: wchain</h1>
+    <p><strong>Date:</strong> February 6, 2026</p>
+    <p class="verdict"><strong>Executive verdict:</strong> <code>wchain</code> is a good low-friction wrapper over Wait Chain Traversal APIs, especially for scriptable hang triage. It complements debugger workflows but does not replace deep contention analysis.</p>
+
+    <h2>What It Does Well</h2>
+    <ul>
+      <li>Provides immediate wait-chain visibility without attaching WinDbg or launching heavy GUI tooling.</li>
+      <li>Default behavior is pragmatic for UI triage: self PID, GUI-only, blocked-only.</li>
+      <li>Supports broader inspection with <code>--all-threads</code> and <code>--include-running</code>.</li>
+      <li>Reports cycle state and per-node metadata in plain text.</li>
+    </ul>
+
+    <h2>Limitations and Risks</h2>
+    <ul>
+      <li>WCT gives a simplified view; it cannot explain all root causes of stalls or lock contention.</li>
+      <li>Output can become very large for high-thread-count processes.</li>
+      <li>No structured output mode for easy ingestion into diagnostics pipelines.</li>
+      <li>Thread accessibility and privilege boundaries can hide details.</li>
+    </ul>
+
+    <h2>Alternatives and Tradeoffs</h2>
+    <ul>
+      <li><strong>Resource Monitor / Task Manager wait-chain UI:</strong> easier visually, weaker for repeatable CLI workflows.</li>
+      <li><strong>WinDbg (<code>!locks</code>, thread analysis):</strong> deeper but slower and requires specialist workflow.</li>
+      <li><strong>Visual Studio threads/parallel stacks:</strong> excellent when actively debugging your own process, not as universal for field triage.</li>
+      <li><strong>ETW/WPA traces:</strong> stronger for systemic performance studies, heavier to collect and interpret.</li>
+    </ul>
+    <p>The tool is not superfluous, but it should be positioned as a quick triage stage before debugger-level analysis.</p>
+
+    <h2>Workflow Fit</h2>
+    <ul>
+      <li><strong>Local debugging:</strong> good first pass to identify blocked threads quickly.</li>
+      <li><strong>Incident response:</strong> useful for rapid snapshots from a live system.</li>
+      <li><strong>Automation:</strong> possible now, but significantly better with JSON and filtering by TID/state.</li>
+    </ul>
+
+    <h2>Evidence Snapshot</h2>
+    <ul>
+      <li><code>wchain --pid $PID --all-threads --include-running</code> returned mixed blocked/running thread nodes and summary counts.</li>
+      <li><code>wchain --help</code> reflects focused defaults and practical PID-based examples.</li>
+      <li>Live process runs showed realistic blocked-thread counts and nontrivial node output.</li>
+    </ul>
+
+    <h2>Final Recommendation</h2>
+    <p><strong>Recommendation: keep and improve.</strong> Add <code>--json</code>, optional thread filters, and a concise mode for high-thread processes.</p>
+  </article>
+</body>
+</html>
