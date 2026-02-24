@@ -193,6 +193,13 @@ Run integration suite:
 powershell -ExecutionPolicy Bypass -File tests\rawwhp\run.ps1
 ```
 
+Skip rebuild when iterating quickly:
+
+```bat
+powershell -ExecutionPolicy Bypass -File tests\rawwhp\discover.ps1 -SkipBuild
+powershell -ExecutionPolicy Bypass -File tests\rawwhp\run.ps1 -SkipBuild
+```
+
 Suite behavior:
 - Mapping and dump validation checks run on every host.
 - Strict exit matrix uses `tests\rawwhp\expected\strict_exits.json`.
@@ -203,6 +210,51 @@ Suite behavior:
 Probe sources:
 - Generated probe binaries: `tests\rawwhp\probes\generated\`
 - Optional fasm templates: `tests\rawwhp\probes\probe16.asm`, `probe32.asm`, `probe64.asm`
+
+---
+
+## Host/Guest Layering
+
+`rawwhp` behavior comes from four layers:
+
+1. Host capability layer (`WHvGetCapability`)
+   - Reports what the platform can support (`*_supported`, `*_supported_mask`).
+2. Partition configuration layer (`WHvSetPartitionProperty`, `WHvGetPartitionProperty`)
+   - Applies the requested behavior for this partition (`*_requested*`, `*_enabled*`).
+3. Guest construction layer (`/mode`, `/cpl`, `/area`, `/at`)
+   - Controls privilege level, segmentation/paging shape, and mapped GPA ranges.
+4. Probe/instruction layer (the bytes you execute)
+   - Determines which exit reason actually occurs under the selected configuration.
+
+Practical implication:
+- Host support alone does not guarantee an exit.
+- The partition property must be accepted.
+- The guest must be configured so the instruction is legal/reachable for that mode/CPL.
+
+---
+
+## Targeted Workflow
+
+Use this loop when you want to validate one specific exit/failure mode:
+
+1. Discover host + baseline topology
+   - `discover.ps1` and inspect `host_caps.json` + `matrix.jsonl`.
+2. Pick target mode/CPL/exit
+   - Example: MSR exits usually require `protected/long` with `/cpl 0`.
+3. Build or edit a focused probe
+   - Use `tests\rawwhp\probes\probe16.asm|probe32.asm|probe64.asm` with `C:\fasm\fasm2\fasm2.cmd`.
+4. Reproduce with one direct `rawwhp` command
+   - Always include `/report` and explicit `/ticks`.
+5. Promote to strict suite
+   - Add/adjust a case in `tests\rawwhp\expected\strict_exits.json`.
+6. Re-run `run.ps1`
+   - Confirms behavior and catches regressions on this host.
+
+Useful direct command template:
+
+```bat
+_test\rawwhp.exe /mode long /cpl 0 /area 10000 100 probe.bin /at 10000 /ticks 400 /report run.json
+```
 
 ---
 
@@ -223,6 +275,17 @@ Run loop termination:
 - In `protected` and `long` mode, default is `cpl=3`; use `/cpl 0` for kernel-ring behavior.
 - `rawwhp` aligns Extended VM exits to host support, excludes `GpaAccessFaultExit` by default (to preserve instruction progress), and probes a reduced mask if needed.
 - If WHP property setup is partially unsupported on host, warnings are printed and execution continues with the best accepted configuration.
+- GPA mapping is page-oriented in `rawwhp`: areas are rounded to 4 KiB and merged into contiguous map segments.
+- Long-mode guest page tables are identity-mapped with 2 MiB pages over those mapped segments.
+- Separate `/area` ranges that land in the same 4 KiB page will share that mapped page (the in-between bytes are still mapped).
+- `rawwhp` unmaps all mapped segments at teardown; it does not currently do incremental unmap during a run.
+- Sub-page carve-outs are not possible with the current approach; if you need hard holes, split regions on 4 KiB boundaries.
+
+Common corner cases:
+- In non-pedantic mode, a hidden runtime area may be auto-added for stack/GDT/page tables; this can change map topology.
+- In pedantic mode, runtime scaffolding must fit inside user areas; fully packed areas can fail layout planning.
+- In `protected`/`long` with `cpl=3`, privileged instructions often raise `#GP` (`Exception type=13`) instead of exiting as privileged operations.
+- `extended_vm_exits_supported_mask` can be larger than the accepted/requested mask for a partition.
 
 ---
 
