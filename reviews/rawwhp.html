@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tool Review: rawwhp</title>
+  <style>
+    body { font-family: "Segoe UI", Arial, sans-serif; margin: 2rem auto; max-width: 900px; line-height: 1.5; color: #1f2937; }
+    h1, h2 { color: #111827; }
+    code { background: #f3f4f6; padding: 0.1rem 0.3rem; border-radius: 4px; }
+    .verdict { padding: 0.75rem 1rem; background: #eef2ff; border-left: 4px solid #4f46e5; }
+  </style>
+</head>
+<body>
+  <article>
+    <h1>Tool Review: rawwhp</h1>
+    <p><strong>Date:</strong> February 24, 2026</p>
+    <p class="verdict"><strong>Executive verdict:</strong> <code>rawwhp</code> is materially useful for low-level payload bring-up and VM-exit triage on Windows hosts with WHP enabled. It should be kept and improved with optional emulation callbacks and structured output.</p>
+
+    <h2>What It Does Well</h2>
+    <ul>
+      <li>Very fast path from bytes-on-disk to runnable guest code without a full emulator stack.</li>
+      <li>Supports practical entry modes (<code>real</code>, <code>unreal</code>, <code>protected</code>, <code>long</code>) for common lab workflows.</li>
+      <li>Provides detailed VM-exit reporting (memory, IO, MSR, CPUID, exceptions) that helps identify exactly what host emulation is missing.</li>
+      <li>Keeps footprint small by mapping one minimal contiguous GPA window.</li>
+    </ul>
+
+    <h2>Limitations and Risks</h2>
+    <ul>
+      <li>No re-entrant emulation loop yet; non-success exits stop execution after reporting.</li>
+      <li>Real/unreal mode currently constrained to sub-1MB payload/entry/stack setup.</li>
+      <li>No JSON or machine-readable mode for CI ingestion.</li>
+      <li>Results depend on host virtualization configuration and WHP availability.</li>
+    </ul>
+
+    <h2>Alternatives and Tradeoffs</h2>
+    <ul>
+      <li><strong>QEMU/Bochs:</strong> richer emulation and devices, but heavier and slower for simple payload smoke tests.</li>
+      <li><strong>WinDbg/kernel debugging paths:</strong> deeper system introspection, but higher setup overhead for quick raw-binary execution checks.</li>
+      <li><strong>Hyper-V VM workflows:</strong> production-like environments, but overkill for tiny one-file payload tests.</li>
+      <li><strong>Custom harness inside existing OS VM:</strong> more context, less control over exact initial CPU state than this tool's direct register setup.</li>
+    </ul>
+    <p>Compared with debugger/IDE-native workflows, <code>rawwhp</code> is not redundant: it occupies a narrow but valid niche for early-stage instruction-level bring-up.</p>
+
+    <h2>Workflow Fit</h2>
+    <ul>
+      <li><strong>Local debugging:</strong> good first-stage check before switching to richer debuggers.</li>
+      <li><strong>Incident/forensics labs:</strong> useful to test tiny suspect stubs in an isolated minimal guest context.</li>
+      <li><strong>Automation:</strong> possible today via exit codes and text logs; better with future JSON output.</li>
+    </ul>
+
+    <h2>Evidence Snapshot</h2>
+    <ul>
+      <li><code>rawwhp --help</code> exposes mode/address options and alias compatibility.</li>
+      <li>Fixture executions demonstrate parse coverage and host capability checks.</li>
+      <li>Exit reports include enough fields (RIP/RSP/RFLAGS + reason-specific context) for follow-up tooling.</li>
+    </ul>
+
+    <h2>Final Recommendation</h2>
+    <p><strong>Recommendation: improve.</strong> Keep the tool, then add optional emulation callbacks and a structured output mode for automation-heavy users.</p>
+  </article>
+</body>
+</html>
