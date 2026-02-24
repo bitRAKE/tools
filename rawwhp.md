@@ -1,26 +1,23 @@
-# rawwhp - execute a raw binary in a minimal WHP guest
+# rawwhp - run WHP guest code with explicit memory areas and dumps
 
-`rawwhp` is a single-file Windows CLI that maps a small guest-physical-memory window, loads a raw binary payload, sets an initial CPU mode, and runs one WHP vCPU until a terminal VM-exit.
+`rawwhp` is a single-file Windows CLI that executes guest code in WHP using one or more explicit guest-physical memory areas, then optionally dumps memory ranges before teardown.
 
 Design goals:
-- Run tiny payloads quickly without full OS boot flow
-- Keep mapping and setup minimal and explicit
-- Provide detailed VM-exit context for host-side emulation/debugging
+- Support sparse, non-overlapping guest memory setup
+- Allow optional per-area file initialization
+- Support post-run round-trip workflows via configurable dumps
 
 ---
 
 ## Features
 
-- Loads arbitrary binary bytes at `/to` guest physical address
-- Starts execution at `/at` (defaults to `/to`)
-- Supports startup modes: `real`, `unreal`, `protected`, `long`
-- `real`: 16-bit
-- `unreal`: 16-bit with expanded segment limits
-- `protected`: 32-bit flat, ring-3
-- `long`: 64-bit flat, ring-3 with minimal identity tables
-- Accepts `/bytes` with compatibility aliases `/len` and `/size`
-- Accepts flat hex and `seg:off` addresses (for `/to` and `/at`)
-- Reports detailed VM-exit context and emulation points
+- Repeatable `/area <start> <length> [file]` declarations
+- Repeatable `/dump <start> <length> [file]` declarations
+- Default entry at first area start (unless `/pedantic` is used)
+- `/at` accepts flat hex and `seg:off`
+- Mode support: `real`, `unreal`, `protected`, `long`
+- Strict-mode policy toggle via `/pedantic`
+- Pretty hexdump output to screen when `/dump` omits a file
 
 ---
 
@@ -42,79 +39,105 @@ clang-cl /nologo /W4 /O2 /DUNICODE /D_UNICODE rawwhp.c WinHvPlatform.lib
 ## Usage
 
 ```text
-rawwhp.exe [/to:<hex|seg:off>] [/at:<hex|seg:off>] [/bytes:<hex>]
-           [/mode:real|unreal|protected|long] [/ticks:<hex>] file
+rawwhp [/mode real|unreal|protected|long] [/ticks <hex>] [/pedantic]
+       [/at <hex|seg:off>]
+       /area <start> <length> [file]...
+       [/dump <start> <length> [file]]...
 ```
 
 Options:
-- `/to <value>` load base address (default `0`)
-- `/at <value>` execution address (default `/to`)
-- `/bytes <value>` logical guest window size from `/to`
-  aliases: `/len`, `/size`
-- `/mode <name>` `real`, `unreal`, `protected`, `long` (default `real`)
-- `/ticks <value>` max `WHvRunVirtualProcessor` iterations (default `0x100000`)
+- `/area <start> <length> [file]`
+  - Adds one non-overlapping GPA range.
+  - If `file` is present, bytes are copied from file start.
+  - If file is shorter than length: remaining bytes stay zero.
+  - If file is longer than length: file is truncated to area length.
+- `/dump <start> <length> [file]`
+  - Dumps GPA bytes after the VCPU run loop exits.
+  - Without `file`, output is a formatted hex+ASCII dump to stdout.
+  - With `file`, bytes are written to that file.
+- `/at <hex|seg:off>`
+  - Entry point.
+  - `real`/`unreal`: `seg:off` is used as explicit CS:RIP; flat values are converted.
+  - `protected`/`long`: interpreted as linear RIP.
+- `/mode <name>`: `real`, `unreal`, `protected`, `long` (default `real`)
+- `/ticks <hex>`: max run-loop iterations (default `0x100000`)
+- `/pedantic`: strict mode
+
+Removed options:
+- `/to`, `/bytes`, `/len`, `/size` are no longer supported.
 
 Input format:
-- All numeric values are hexadecimal (`4000` means `0x4000`)
+- All numeric values are hexadecimal (`1000` means `0x1000`)
 - `0x` prefix is accepted
-- Addresses can also be `seg:off` (example: `80:100`)
+- Address fields can use `seg:off`
+
+---
+
+## Strict Mode (`/pedantic`)
+
+`/pedantic` changes behavior:
+- `/at` is required.
+- Dump target files must not already exist.
+- Area/file length mismatch emits warnings.
+- Runtime scaffolding must fit user-provided areas (no hidden runtime area is auto-added).
+
+Without `/pedantic`:
+- `/at` defaults to first `/area` start.
+- Hidden runtime area may be auto-added for stack/GDT/page tables.
+- Dump files are overwritten in command order.
 
 ---
 
 ## Examples
 
-### Requested syntax examples
+Single area, explicit entry:
 
 ```bat
-rawwhp /to 7C00 mymbr.bin
-rawwhp /to 80:0 /at 80:100 /bytes 4000 test.com
-rawwhp /to 800 /mode protected kernel32.bin
+rawwhp /area 7C00 200 mymbr.bin /at 7C00
 ```
 
-### Simple controlled fixtures
+Multiple areas:
 
 ```bat
-rawwhp /to 1000 /mode real hlt.bin
-rawwhp /to 2000 /mode protected /ticks 10000 int3.bin
-rawwhp /to 3000 /mode long /ticks 20000 vmcall.bin
+rawwhp /area 8000 2000 code.bin /area 20000 1000 data.bin /mode protected /at 8000
+```
+
+Round-trip dump to file:
+
+```bat
+rawwhp /area 10000 4000 code.bin /at 10000 /dump 10000 20 output.bin
+```
+
+Dump to screen:
+
+```bat
+rawwhp /area 1000 100 mymbr.bin /at 1000 /dump 1000 20
+```
+
+Pedantic mode:
+
+```bat
+rawwhp /pedantic /area 10000 8000 input.bin /at 10000 /dump 10000 10 out.bin
 ```
 
 ---
 
 ## VM-exit behavior
 
-Run loop behavior:
+Run loop termination:
 - Success exits: `WHvRunVpExitReasonX64Halt`, `WHvRunVpExitReasonHypercall`
-- Timeout exit: returns code `3` when `/ticks` is exhausted
-- Other exits: detailed context is printed and execution stops (exit code `4`)
-
-Examples of printed detail:
-- `MemoryAccess` with access type, GPA/GVA, instruction bytes
-- `Exception` with exception type, error code, and bytes
-- `IoPort`, `MsrAccess`, `Cpuid`, `UnsupportedFeature`, APIC traps
-
-`rawwhp` v1 intentionally does not run a re-entrant emulation loop for exits such as MMIO/IO/MSR/CPUID; it stops and reports an emulation point for host handling.
+- Timeout: `/ticks` exhausted
+- Other exits: detailed context is printed and execution stops
 
 ---
 
 ## Notes
 
-- Real/unreal mode currently requires payload/entry/stack below `0x100000`.
-- `/bytes` defines the logical window from `/to`; runtime scaffolding (stack/GDT/tables as needed) must fit inside this window.
-- Mapping is page-aligned internally, but logical validation uses requested addresses and `/bytes`.
-- Privileged instructions or unavailable host features can trigger non-success exits.
-- In `protected` and `long` modes, payloads are started in ring-3; instructions like `HLT` can fault and surface as non-success exits.
-- Some hosts do not allow setting all extended-exit properties; this is reported as warnings and execution continues with platform defaults.
-- Real-mode interrupts may hit low-memory vectors (IVT/BDA); those accesses are reported as emulation points when unmapped.
-
----
-
-## Extending rawwhp
-
-Natural next additions:
-- Add a callback-based emulation loop for MMIO/IO/MSR/CPUID paths
-- Add register preset import/export and initial register overrides
-- Add JSON output mode for automation and CI diagnostics
+- Real/unreal currently require entry/stack below `0x100000`.
+- `/area` ranges must not overlap.
+- `/dump` ranges must be fully covered by mapped GPA ranges.
+- In `protected` and `long` mode, guest runs at ring-3 defaults; privileged instructions may fault.
+- If WHP property setup is partially unsupported on host, warnings are printed and execution continues with defaults.
 
 ---
 
@@ -124,7 +147,7 @@ Natural next additions:
 - `1` runtime/WHP failure
 - `2` usage/parse/validation failure
 - `3` timeout (`/ticks` exhausted)
-- `4` non-success VM-exit reported (emulation point / unsupported path)
+- `4` non-success VM-exit reported
 
 ---
 
