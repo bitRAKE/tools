@@ -1,0 +1,177 @@
+{
+  "schema": "rawwhp.strict.v1",
+  "required_capabilities": {
+    "extended_vm_exits_supported": true,
+    "exception_bitmap_supported": true,
+    "msr_exit_bitmap_supported": true
+  },
+  "defaults": {
+    "area_start": "0x10000",
+    "area_length": "0x100",
+    "at": "0x10000",
+    "ticks": "0x400"
+  },
+  "cases": [
+    {
+      "id": "real_hlt",
+      "mode": "real",
+      "probe": "hlt",
+      "expect": {
+        "exit_reason": "X64Halt"
+      }
+    },
+    {
+      "id": "real_io_in",
+      "mode": "real",
+      "probe": "io_in",
+      "expect": {
+        "exit_reason": "X64IoPortAccess",
+        "details": {
+          "io": {
+            "is_write": false,
+            "port": "0x80",
+            "size": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "real_io_out",
+      "mode": "real",
+      "probe": "io_out",
+      "expect": {
+        "exit_reason": "X64IoPortAccess",
+        "details": {
+          "io": {
+            "is_write": true,
+            "port": "0x80",
+            "size": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "long_int3",
+      "mode": "long",
+      "probe": "int3",
+      "expect": {
+        "exit_reason": "Exception",
+        "details": {
+          "exception": {
+            "type": 3
+          }
+        }
+      }
+    },
+    {
+      "id": "long_ud2",
+      "mode": "long",
+      "probe": "ud2",
+      "expect": {
+        "exit_reason": "Exception",
+        "details": {
+          "exception": {
+            "type": 6
+          }
+        }
+      }
+    },
+    {
+      "id": "long_div0",
+      "mode": "long",
+      "probe": "div0",
+      "expect": {
+        "exit_reason": "Exception",
+        "details": {
+          "exception": {
+            "type": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "long_cpuid",
+      "mode": "long",
+      "probe": "cpuid",
+      "expect": {
+        "exit_reason": "X64Cpuid"
+      }
+    },
+    {
+      "id": "long_rdmsr",
+      "mode": "long",
+      "probe": "rdmsr",
+      "expect": {
+        "exit_reason": "Exception",
+        "details": {
+          "exception": {
+            "type": 13
+          }
+        }
+      }
+    },
+    {
+      "id": "long_wrmsr",
+      "mode": "long",
+      "probe": "wrmsr",
+      "expect": {
+        "exit_reason": "Exception",
+        "details": {
+          "exception": {
+            "type": 13
+          }
+        }
+      }
+    },
+    {
+      "id": "long_vmcall",
+      "mode": "long",
+      "probe": "vmcall",
+      "expect": {
+        "exit_reason": "Exception",
+        "details": {
+          "exception": {
+            "type": 6
+          }
+        }
+      }
+    },
+    {
+      "id": "long_rdmsr_cpl0",
+      "mode": "long",
+      "cpl": "0",
+      "probe": "rdmsr_unk",
+      "expect": {
+        "exit_reason": "X64MsrAccess",
+        "details": {
+          "msr": {
+            "is_write": false
+          }
+        }
+      }
+    },
+    {
+      "id": "long_wrmsr_cpl0",
+      "mode": "long",
+      "cpl": "0",
+      "probe": "wrmsr_unk",
+      "expect": {
+        "exit_reason": "X64MsrAccess",
+        "details": {
+          "msr": {
+            "is_write": true
+          }
+        }
+      }
+    },
+    {
+      "id": "long_hlt_cpl0",
+      "mode": "long",
+      "cpl": "0",
+      "probe": "hlt",
+      "expect": {
+        "exit_reason": "X64Halt"
+      }
+    }
+  ]
+}

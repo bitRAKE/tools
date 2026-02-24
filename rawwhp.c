@@ -9,8 +9,9 @@
 //   clang-cl /nologo /W4 /O2 /DUNICODE /D_UNICODE rawwhp.c WinHvPlatform.lib
 //
 // Usage:
-//   rawwhp [/mode real|unreal|protected|long] [/ticks <hex>] [/pedantic]
+//   rawwhp [/mode real|unreal|protected|long] [/cpl 0|3] [/ticks <hex>] [/pedantic]
 //          [/at <hex|seg:off>]
+//          [/report <file>]
 //          /area <start> <length> [file]...
 //          [/dump <start> <length> [file]]...
 //
@@ -44,16 +45,20 @@
 #define X64_CR0_PG (1ull << 31)
 #define X64_CR4_PAE (1ull << 5)
 #define X64_EFER_LME (1ull << 8)
+#define EXT_VM_EXIT_GPA_ACCESS_FAULT_MASK (1ull << 14)
 
 #define PT_PRESENT (1ull << 0)
 #define PT_WRITE   (1ull << 1)
 #define PT_USER    (1ull << 2)
 #define PT_PS      (1ull << 7)
 
+#define SEL_CODE32_K 0x08
+#define SEL_DATA32_K 0x10
 #define SEL_CODE32_U 0x1B
 #define SEL_DATA32_U 0x23
 #define SEL_CODE64_U 0x2B
 #define SEL_DATA64_U 0x33
+#define SEL_CODE64_K 0x38
 
 typedef enum {
     MODE_REAL = 0,
@@ -143,8 +148,11 @@ typedef struct {
 typedef struct {
     ENTRY_POINT entry;
     GUEST_MODE mode;
+    bool cpl_explicit;
+    uint8_t cpl;
     uint64_t ticks;
     bool pedantic;
+    const wchar_t* report_path;
     AREA_LIST areas;
     DUMP_LIST dumps;
 } OPTIONS;
@@ -164,6 +172,54 @@ typedef struct {
     uint64_t tables_base;
     uint64_t pml4_gpa;
 } RUNTIME_LAYOUT;
+
+typedef struct {
+    bool extended_vm_exits_supported;
+    uint64_t extended_vm_exits_supported_mask;
+    bool extended_vm_exits_requested;
+    uint64_t extended_vm_exits_requested_mask;
+    bool extended_vm_exits_enabled;
+    uint64_t extended_vm_exits_enabled_mask;
+    bool exception_bitmap_supported;
+    uint64_t exception_bitmap_supported_mask;
+    bool exception_bitmap_requested;
+    uint64_t exception_bitmap_requested_mask;
+    bool exception_bitmap_enabled;
+    uint64_t exception_bitmap_enabled_mask;
+    bool msr_exit_bitmap_supported;
+    uint64_t msr_exit_bitmap_supported_mask;
+    bool msr_exit_bitmap_requested;
+    uint64_t msr_exit_bitmap_requested_mask;
+    bool msr_exit_bitmap_enabled;
+    uint64_t msr_exit_bitmap_enabled_mask;
+} PARTITION_CAPS;
+
+typedef enum {
+    RUN_STATUS_SETUP_ERROR = 0,
+    RUN_STATUS_SUCCESS = 1,
+    RUN_STATUS_VM_EXIT = 2
+} RUN_STATUS;
+
+typedef struct {
+    RUN_STATUS status;
+    bool has_exit_reason;
+    WHV_RUN_VP_EXIT_REASON exit_reason;
+    bool timed_out;
+    bool has_run_hresult;
+    HRESULT run_hresult;
+    uint64_t ticks_executed;
+    uint64_t rip;
+    uint64_t rsp;
+    uint64_t rflags;
+    uint8_t cpl;
+    bool has_exit_context;
+    WHV_RUN_VP_EXIT_CONTEXT exit_context;
+} RUN_REPORT;
+
+typedef struct {
+    bool attempted;
+    bool ok;
+} DUMP_RESULT;
 
 typedef struct {
     uint16_t pml4_index;
@@ -449,19 +505,31 @@ static bool parse_mode_name(const wchar_t* s, GUEST_MODE* out) {
     return false;
 }
 
+static bool parse_cpl_value(const wchar_t* s, uint8_t* out) {
+    if (!s || !out) return false;
+    uint64_t v = 0;
+    if (!parse_hex_u64_strict(s, &v)) return false;
+    if (v != 0ull && v != 3ull) return false;
+    *out = (uint8_t)v;
+    return true;
+}
+
 static void print_usage(void) {
     outw(
         L"Execute guest code in a WHP partition using explicit GPA areas.\n"
         L"\n"
-        L"rawwhp [/mode real|unreal|protected|long] [/ticks <hex>] [/pedantic]\n"
+        L"rawwhp [/mode real|unreal|protected|long] [/cpl 0|3] [/ticks <hex>] [/pedantic]\n"
         L"       [/at <hex|seg:off>]\n"
+        L"       [/report <file>]\n"
         L"       /area <start> <length> [file]...\n"
         L"       [/dump <start> <length> [file]]...\n"
         L"\n"
         L"/area <start> <len> [file]  map GPA area; optionally initialize from file\n"
         L"/dump <start> <len> [file]  dump GPA bytes after run (stdout or file)\n"
         L"/at <value>                 entry address (default: first /area start)\n"
+        L"/report <file>              write run report JSON to file\n"
         L"/mode <name>                real | unreal | protected | long (default: real)\n"
+        L"/cpl <0|3>                  protected/long privilege level (default: 3)\n"
         L"/ticks <hex>                max run-loop iterations (default: 0x100000)\n"
         L"/pedantic                   strict validation behavior\n"
         L"\n"
@@ -679,6 +747,8 @@ static PARSE_RESULT parse_args(int argc, wchar_t** argv, OPTIONS* o) {
     if (!o) return PARSE_ERROR;
     ZeroMemory(o, sizeof(*o));
     o->mode = MODE_REAL;
+    o->cpl_explicit = false;
+    o->cpl = 0;
     o->ticks = 0x100000ull;
 
     for (int i = 1; i < argc; ++i) {
@@ -754,6 +824,19 @@ static PARSE_RESULT parse_args(int argc, wchar_t** argv, OPTIONS* o) {
             continue;
         }
 
+        if (streqi(key, L"cpl")) {
+            const wchar_t* v = inline_value;
+            if (!v) {
+                if (i + 1 >= argc) return PARSE_ERROR;
+                v = argv[++i];
+            }
+            uint8_t cpl = 0;
+            if (!parse_cpl_value(v, &cpl)) return PARSE_ERROR;
+            o->cpl = cpl;
+            o->cpl_explicit = true;
+            continue;
+        }
+
         if (streqi(key, L"pedantic")) {
             o->pedantic = true;
             continue;
@@ -775,6 +858,17 @@ static PARSE_RESULT parse_args(int argc, wchar_t** argv, OPTIONS* o) {
             continue;
         }
 
+        if (streqi(key, L"report")) {
+            const wchar_t* v = inline_value;
+            if (!v) {
+                if (i + 1 >= argc) return PARSE_ERROR;
+                v = argv[++i];
+            }
+            if (!v || !*v) return PARSE_ERROR;
+            o->report_path = v;
+            continue;
+        }
+
         return PARSE_ERROR;
     }
 
@@ -789,6 +883,13 @@ static PARSE_RESULT parse_args(int argc, wchar_t** argv, OPTIONS* o) {
         o->entry.explicit_seg_off = false;
         o->entry.seg = 0;
         o->entry.off = 0;
+    }
+
+    if (!o->cpl_explicit) {
+        o->cpl = (o->mode == MODE_PROTECTED || o->mode == MODE_LONG) ? 3u : 0u;
+    }
+    if ((o->mode == MODE_REAL || o->mode == MODE_UNREAL) && o->cpl != 0u) {
+        return PARSE_ERROR;
     }
 
     return PARSE_OK;
@@ -1521,12 +1622,13 @@ static void build_gdt(uint8_t* gdt) {
     ZeroMemory(gdt, (SIZE_T)GDT_SIZE);
 
     write_gdt_descriptor(gdt, 0, 0, 0, 0, 0);
-    write_gdt_descriptor(gdt, 1, 0, 0xFFFFu, 0x9Au, 0x0u);
-    write_gdt_descriptor(gdt, 2, 0, 0xFFFFu, 0x92u, 0x0u);
+    write_gdt_descriptor(gdt, 1, 0, 0xFFFFFu, 0x9Au, 0xCu);
+    write_gdt_descriptor(gdt, 2, 0, 0xFFFFFu, 0x92u, 0xCu);
     write_gdt_descriptor(gdt, 3, 0, 0xFFFFFu, 0xFAu, 0xCu);
     write_gdt_descriptor(gdt, 4, 0, 0xFFFFFu, 0xF2u, 0xCu);
     write_gdt_descriptor(gdt, 5, 0, 0xFFFFFu, 0xFAu, 0xAu);
     write_gdt_descriptor(gdt, 6, 0, 0xFFFFFu, 0xF2u, 0xCu);
+    write_gdt_descriptor(gdt, 7, 0, 0xFFFFFu, 0x9Au, 0xAu);
 }
 
 static bool build_identity_2m_page_tables(const MAP_LIST* maps, const RUNTIME_LAYOUT* rt) {
@@ -1712,7 +1814,116 @@ static bool check_hypervisor_present(void) {
     return true;
 }
 
-static bool set_partition_properties(WHV_PARTITION_HANDLE partition) {
+static void configure_extended_vm_exits_mask(
+    WHV_PARTITION_HANDLE partition,
+    uint64_t supported_mask,
+    uint64_t* requested_mask_out,
+    uint64_t* enabled_mask_out,
+    bool* enabled_out) {
+    if (!requested_mask_out || !enabled_mask_out || !enabled_out) {
+        return;
+    }
+
+    *requested_mask_out = 0;
+    *enabled_mask_out = 0;
+    *enabled_out = false;
+
+    if (supported_mask == 0) {
+        return;
+    }
+
+    uint64_t desired_mask = supported_mask & ~EXT_VM_EXIT_GPA_ACCESS_FAULT_MASK;
+
+    WHV_EXTENDED_VM_EXITS request;
+    ZeroMemory(&request, sizeof(request));
+    request.AsUINT64 = desired_mask;
+
+    HRESULT hr = WHvSetPartitionProperty(
+        partition,
+        WHvPartitionPropertyCodeExtendedVmExits,
+        &request,
+        (UINT32)sizeof(request));
+    if (FAILED(hr)) {
+        uint64_t accepted = 0;
+        for (UINT32 bit = 0; bit < 64; ++bit) {
+            uint64_t test_bit = 1ull << bit;
+            if ((desired_mask & test_bit) == 0) {
+                continue;
+            }
+
+            WHV_EXTENDED_VM_EXITS candidate;
+            ZeroMemory(&candidate, sizeof(candidate));
+            candidate.AsUINT64 = accepted | test_bit;
+
+            hr = WHvSetPartitionProperty(
+                partition,
+                WHvPartitionPropertyCodeExtendedVmExits,
+                &candidate,
+                (UINT32)sizeof(candidate));
+            if (SUCCEEDED(hr)) {
+                accepted |= test_bit;
+            }
+        }
+
+        request.AsUINT64 = accepted;
+        if (accepted != 0) {
+            hr = WHvSetPartitionProperty(
+                partition,
+                WHvPartitionPropertyCodeExtendedVmExits,
+                &request,
+                (UINT32)sizeof(request));
+            if (FAILED(hr)) {
+                errf(L"warning: failed to set reduced ExtendedVmExits mask=0x%llx (hr=0x%08lX); continuing with defaults.\n",
+                    (unsigned long long)accepted,
+                    (unsigned long)hr);
+                request.AsUINT64 = 0;
+            }
+        }
+        else {
+            errw(L"warning: no ExtendedVmExits bits were accepted for this partition.\n");
+        }
+    }
+
+    WHV_EXTENDED_VM_EXITS active;
+    ZeroMemory(&active, sizeof(active));
+    UINT32 active_written = 0;
+    HRESULT ghr = WHvGetPartitionProperty(
+        partition,
+        WHvPartitionPropertyCodeExtendedVmExits,
+        &active,
+        (UINT32)sizeof(active),
+        &active_written);
+    if (SUCCEEDED(ghr)) {
+        uint64_t req = request.AsUINT64;
+        uint64_t act = active.AsUINT64;
+        if (req != 0 && ((act & req) != req)) {
+            errf(L"warning: ExtendedVmExits readback adjusted requested=0x%llx active=0x%llx; adopting active mask.\n",
+                (unsigned long long)req,
+                (unsigned long long)act);
+            req = act;
+        }
+        *requested_mask_out = req;
+        *enabled_mask_out = act;
+        if (req != 0) {
+            *enabled_out = ((act & req) == req);
+        }
+        else {
+            *enabled_out = (act != 0);
+        }
+        return;
+    }
+
+    errf(L"warning: WHvGetPartitionProperty(ExtendedVmExits) failed (hr=0x%08lX); assuming configured mask is active.\n",
+        (unsigned long)ghr);
+    *requested_mask_out = request.AsUINT64;
+    *enabled_mask_out = request.AsUINT64;
+    *enabled_out = (request.AsUINT64 != 0);
+}
+
+static bool set_partition_properties(WHV_PARTITION_HANDLE partition, PARTITION_CAPS* caps_out) {
+    PARTITION_CAPS caps_state;
+    ZeroMemory(&caps_state, sizeof(caps_state));
+
     WHV_PARTITION_PROPERTY prop;
     ZeroMemory(&prop, sizeof(prop));
     prop.ProcessorCount = 1;
@@ -1732,28 +1943,135 @@ static bool set_partition_properties(WHV_PARTITION_HANDLE partition) {
     ZeroMemory(&caps, sizeof(caps));
     hr = WHvGetCapability(WHvCapabilityCodeExtendedVmExits, &caps, (UINT32)sizeof(caps), &written);
     if (SUCCEEDED(hr)) {
-        WHV_EXTENDED_VM_EXITS exits = caps.ExtendedVmExits;
-        hr = WHvSetPartitionProperty(
-            partition,
-            WHvPartitionPropertyCodeExtendedVmExits,
-            &exits,
-            (UINT32)sizeof(exits));
-        if (FAILED(hr)) {
-            errw(L"warning: failed to set ExtendedVmExits; continuing with defaults.\n");
+        WHV_EXTENDED_VM_EXITS supported = caps.ExtendedVmExits;
+        caps_state.extended_vm_exits_supported = (supported.AsUINT64 != 0);
+        caps_state.extended_vm_exits_supported_mask = supported.AsUINT64;
+        if (supported.AsUINT64 != 0) {
+            caps_state.extended_vm_exits_requested = true;
+            configure_extended_vm_exits_mask(
+                partition,
+                supported.AsUINT64,
+                &caps_state.extended_vm_exits_requested_mask,
+                &caps_state.extended_vm_exits_enabled_mask,
+                &caps_state.extended_vm_exits_enabled);
         }
+    }
+    else {
+        errf(L"warning: WHvGetCapability(ExtendedVmExits) failed (hr=0x%08lX).\n", (unsigned long)hr);
     }
 
 #if defined(_AMD64_)
-    UINT64 all_exceptions = ~0ull;
-    hr = WHvSetPartitionProperty(
-        partition,
-        WHvPartitionPropertyCodeExceptionExitBitmap,
-        &all_exceptions,
-        (UINT32)sizeof(all_exceptions));
-    if (FAILED(hr)) {
-        errw(L"warning: failed to set ExceptionExitBitmap; exception exits may be limited.\n");
+    WHV_CAPABILITY ex_caps;
+    written = 0;
+    ZeroMemory(&ex_caps, sizeof(ex_caps));
+    hr = WHvGetCapability(WHvCapabilityCodeExceptionExitBitmap, &ex_caps, (UINT32)sizeof(ex_caps), &written);
+    if (SUCCEEDED(hr)) {
+        UINT64 bitmap = ex_caps.ExceptionExitBitmap;
+        caps_state.exception_bitmap_supported = (bitmap != 0);
+        caps_state.exception_bitmap_supported_mask = bitmap;
+        if (bitmap != 0) {
+            caps_state.exception_bitmap_requested = true;
+            caps_state.exception_bitmap_requested_mask = bitmap;
+            hr = WHvSetPartitionProperty(
+                partition,
+                WHvPartitionPropertyCodeExceptionExitBitmap,
+                &bitmap,
+                (UINT32)sizeof(bitmap));
+            if (FAILED(hr)) {
+                errf(L"warning: failed to set ExceptionExitBitmap (mask=0x%llx, hr=0x%08lX); exception exits may be limited.\n",
+                    (unsigned long long)bitmap,
+                    (unsigned long)hr);
+            }
+            else {
+                UINT64 active_bitmap = 0;
+                UINT32 active_written = 0;
+                HRESULT ghr = WHvGetPartitionProperty(
+                    partition,
+                    WHvPartitionPropertyCodeExceptionExitBitmap,
+                    &active_bitmap,
+                    (UINT32)sizeof(active_bitmap),
+                    &active_written);
+                if (SUCCEEDED(ghr)) {
+                    caps_state.exception_bitmap_enabled_mask = active_bitmap;
+                    caps_state.exception_bitmap_enabled =
+                        ((active_bitmap & bitmap) == bitmap);
+                    if (!caps_state.exception_bitmap_enabled) {
+                        errf(L"warning: ExceptionExitBitmap readback mismatch requested=0x%llx active=0x%llx\n",
+                            (unsigned long long)bitmap,
+                            (unsigned long long)active_bitmap);
+                    }
+                }
+                else {
+                    errf(L"warning: WHvGetPartitionProperty(ExceptionExitBitmap) failed (hr=0x%08lX); assuming enable succeeded.\n",
+                        (unsigned long)ghr);
+                    caps_state.exception_bitmap_enabled = true;
+                    caps_state.exception_bitmap_enabled_mask = bitmap;
+                }
+            }
+        }
+    }
+    else {
+        errf(L"warning: WHvGetCapability(ExceptionExitBitmap) failed (hr=0x%08lX).\n", (unsigned long)hr);
+    }
+
+    WHV_CAPABILITY msr_caps;
+    written = 0;
+    ZeroMemory(&msr_caps, sizeof(msr_caps));
+    hr = WHvGetCapability(WHvCapabilityCodeX64MsrExitBitmap, &msr_caps, (UINT32)sizeof(msr_caps), &written);
+    if (SUCCEEDED(hr)) {
+        WHV_X64_MSR_EXIT_BITMAP msr_bitmap = msr_caps.X64MsrExitBitmap;
+        caps_state.msr_exit_bitmap_supported = (msr_bitmap.AsUINT64 != 0);
+        caps_state.msr_exit_bitmap_supported_mask = msr_bitmap.AsUINT64;
+        if (msr_bitmap.AsUINT64 != 0) {
+            caps_state.msr_exit_bitmap_requested = true;
+            caps_state.msr_exit_bitmap_requested_mask = msr_bitmap.AsUINT64;
+            hr = WHvSetPartitionProperty(
+                partition,
+                WHvPartitionPropertyCodeX64MsrExitBitmap,
+                &msr_bitmap,
+                (UINT32)sizeof(msr_bitmap));
+            if (FAILED(hr)) {
+                errf(L"warning: failed to set X64MsrExitBitmap (mask=0x%llx, hr=0x%08lX).\n",
+                    (unsigned long long)msr_bitmap.AsUINT64,
+                    (unsigned long)hr);
+            }
+            else {
+                WHV_X64_MSR_EXIT_BITMAP active_msr;
+                ZeroMemory(&active_msr, sizeof(active_msr));
+                UINT32 active_written = 0;
+                HRESULT ghr = WHvGetPartitionProperty(
+                    partition,
+                    WHvPartitionPropertyCodeX64MsrExitBitmap,
+                    &active_msr,
+                    (UINT32)sizeof(active_msr),
+                    &active_written);
+                if (SUCCEEDED(ghr)) {
+                    caps_state.msr_exit_bitmap_enabled_mask = active_msr.AsUINT64;
+                    caps_state.msr_exit_bitmap_enabled =
+                        ((active_msr.AsUINT64 & msr_bitmap.AsUINT64) == msr_bitmap.AsUINT64);
+                    if (!caps_state.msr_exit_bitmap_enabled) {
+                        errf(L"warning: X64MsrExitBitmap readback mismatch requested=0x%llx active=0x%llx\n",
+                            (unsigned long long)msr_bitmap.AsUINT64,
+                            (unsigned long long)active_msr.AsUINT64);
+                    }
+                }
+                else {
+                    errf(L"warning: WHvGetPartitionProperty(X64MsrExitBitmap) failed (hr=0x%08lX); assuming enable succeeded.\n",
+                        (unsigned long)ghr);
+                    caps_state.msr_exit_bitmap_enabled = true;
+                    caps_state.msr_exit_bitmap_enabled_mask = msr_bitmap.AsUINT64;
+                }
+            }
+        }
+    }
+    else {
+        errf(L"warning: WHvGetCapability(X64MsrExitBitmap) failed (hr=0x%08lX).\n", (unsigned long)hr);
     }
 #endif
+
+    if (caps_out) {
+        *caps_out = caps_state;
+    }
 
     return true;
 }
@@ -1820,8 +2138,13 @@ static bool set_guest_registers(WHV_PARTITION_HANDLE partition, const OPTIONS* o
         idtr.Limit = 0x03FF;
     }
     else if (o->mode == MODE_PROTECTED) {
-        cs = make_segment(SEL_CODE32_U, 0, 0xFFFFFFFFu, 0xB, 3, 0, 1, 1);
-        ds = make_segment(SEL_DATA32_U, 0, 0xFFFFFFFFu, 0x3, 3, 0, 1, 1);
+        bool kernel = (o->cpl == 0);
+        uint16_t cs_sel = kernel ? SEL_CODE32_K : SEL_CODE32_U;
+        uint16_t ds_sel = kernel ? SEL_DATA32_K : SEL_DATA32_U;
+        uint16_t dpl = kernel ? 0 : 3;
+
+        cs = make_segment(cs_sel, 0, 0xFFFFFFFFu, 0xB, dpl, 0, 1, 1);
+        ds = make_segment(ds_sel, 0, 0xFFFFFFFFu, 0x3, dpl, 0, 1, 1);
         es = ds;
         fs = ds;
         gs = ds;
@@ -1831,8 +2154,13 @@ static bool set_guest_registers(WHV_PARTITION_HANDLE partition, const OPTIONS* o
         rip = o->entry.linear;
     }
     else {
-        cs = make_segment(SEL_CODE64_U, 0, 0xFFFFFFFFu, 0xB, 3, 1, 0, 1);
-        ds = make_segment(SEL_DATA64_U, 0, 0xFFFFFFFFu, 0x3, 3, 0, 1, 1);
+        bool kernel = (o->cpl == 0);
+        uint16_t cs_sel = kernel ? SEL_CODE64_K : SEL_CODE64_U;
+        uint16_t ds_sel = kernel ? SEL_DATA32_K : SEL_DATA64_U;
+        uint16_t dpl = kernel ? 0 : 3;
+
+        cs = make_segment(cs_sel, 0, 0xFFFFFFFFu, 0xB, dpl, 1, 0, 1);
+        ds = make_segment(ds_sel, 0, 0xFFFFFFFFu, 0x3, dpl, 0, 1, 1);
         es = ds;
         fs = ds;
         gs = ds;
@@ -1847,7 +2175,7 @@ static bool set_guest_registers(WHV_PARTITION_HANDLE partition, const OPTIONS* o
 
     if (rt->has_gdt) {
         gdtr.Base = rt->gdt_gpa;
-        gdtr.Limit = 0x37;
+        gdtr.Limit = 0x3F;
     }
     else {
         gdtr.Base = 0;
@@ -2002,6 +2330,387 @@ static void print_exit_details(const WHV_RUN_VP_EXIT_CONTEXT* e) {
     }
 }
 
+static void init_run_report(RUN_REPORT* r) {
+    if (!r) return;
+    ZeroMemory(r, sizeof(*r));
+    r->status = RUN_STATUS_SETUP_ERROR;
+    r->has_exit_reason = true;
+    r->exit_reason = WHvRunVpExitReasonNone;
+}
+
+static const wchar_t* run_status_name(RUN_STATUS s) {
+    switch (s) {
+    case RUN_STATUS_SUCCESS: return L"success";
+    case RUN_STATUS_VM_EXIT: return L"vm_exit";
+    case RUN_STATUS_SETUP_ERROR:
+    default:
+        return L"setup_error";
+    }
+}
+
+static bool report_write_w(HANDLE h, const wchar_t* s) {
+    if (!s) return true;
+
+    int need = WideCharToMultiByte(CP_UTF8, 0, s, -1, NULL, 0, NULL, NULL);
+    if (need <= 0) return false;
+
+    char* buf = (char*)HeapAlloc(GetProcessHeap(), 0, (SIZE_T)need);
+    if (!buf) return false;
+
+    if (WideCharToMultiByte(CP_UTF8, 0, s, -1, buf, need, NULL, NULL) <= 0) {
+        HeapFree(GetProcessHeap(), 0, buf);
+        return false;
+    }
+
+    DWORD want = (DWORD)(need - 1);
+    DWORD wrote = 0;
+    BOOL ok = WriteFile(h, buf, want, &wrote, NULL);
+    HeapFree(GetProcessHeap(), 0, buf);
+    return ok && wrote == want;
+}
+
+static bool report_vwritef(HANDLE h, const wchar_t* fmt, va_list ap) {
+    wchar_t stackbuf[2048];
+    va_list copy;
+    va_copy(copy, ap);
+    int n = _vsnwprintf_s(stackbuf, _countof(stackbuf), _TRUNCATE, fmt, copy);
+    va_end(copy);
+    if (n >= 0) {
+        return report_write_w(h, stackbuf);
+    }
+
+    size_t cap = 8192;
+    wchar_t* dyn = (wchar_t*)HeapAlloc(GetProcessHeap(), 0, cap * sizeof(wchar_t));
+    if (!dyn) return false;
+
+    va_copy(copy, ap);
+    (void)_vsnwprintf_s(dyn, cap, _TRUNCATE, fmt, copy);
+    va_end(copy);
+    bool ok = report_write_w(h, dyn);
+    HeapFree(GetProcessHeap(), 0, dyn);
+    return ok;
+}
+
+static bool report_writef(HANDLE h, const wchar_t* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    bool ok = report_vwritef(h, fmt, ap);
+    va_end(ap);
+    return ok;
+}
+
+static bool report_write_json_string(HANDLE h, const wchar_t* s) {
+    if (!report_write_w(h, L"\"")) return false;
+    if (!s) {
+        return report_write_w(h, L"\"");
+    }
+
+    for (const wchar_t* p = s; *p; ++p) {
+        wchar_t tmp[2] = { *p, 0 };
+        switch (*p) {
+        case L'\"':
+            if (!report_write_w(h, L"\\\"")) return false;
+            break;
+        case L'\\':
+            if (!report_write_w(h, L"\\\\")) return false;
+            break;
+        case L'\b':
+            if (!report_write_w(h, L"\\b")) return false;
+            break;
+        case L'\f':
+            if (!report_write_w(h, L"\\f")) return false;
+            break;
+        case L'\n':
+            if (!report_write_w(h, L"\\n")) return false;
+            break;
+        case L'\r':
+            if (!report_write_w(h, L"\\r")) return false;
+            break;
+        case L'\t':
+            if (!report_write_w(h, L"\\t")) return false;
+            break;
+        default:
+            if ((unsigned)*p < 0x20u) {
+                if (!report_writef(h, L"\\u%04X", (unsigned)*p)) return false;
+            }
+            else {
+                if (!report_write_w(h, tmp)) return false;
+            }
+            break;
+        }
+    }
+
+    return report_write_w(h, L"\"");
+}
+
+static bool report_write_json_hex_u64(HANDLE h, uint64_t v) {
+    return report_writef(h, L"\"0x%llx\"", (unsigned long long)v);
+}
+
+static bool report_write_json_bool(HANDLE h, bool v) {
+    return report_write_w(h, v ? L"true" : L"false");
+}
+
+static bool report_write_instruction_array(HANDLE h, const UINT8* bytes, UINT8 count) {
+    if (!report_write_w(h, L"[")) return false;
+    UINT8 n = count;
+    if (n > 16) n = 16;
+    for (UINT8 i = 0; i < n; ++i) {
+        if (i != 0) {
+            if (!report_write_w(h, L",")) return false;
+        }
+        if (!report_writef(h, L"%u", (unsigned)bytes[i])) return false;
+    }
+    return report_write_w(h, L"]");
+}
+
+static bool report_write_exit_details_json(HANDLE h, const RUN_REPORT* run) {
+    if (!report_write_w(h, L"{")) return false;
+    if (!run || !run->has_exit_context || run->timed_out) {
+        return report_write_w(h, L"}");
+    }
+
+    switch (run->exit_reason) {
+    case WHvRunVpExitReasonMemoryAccess: {
+        const WHV_MEMORY_ACCESS_CONTEXT* c = &run->exit_context.MemoryAccess;
+        const wchar_t* atype = L"unknown";
+        if (c->AccessInfo.AccessType == WHvMemoryAccessRead) atype = L"read";
+        else if (c->AccessInfo.AccessType == WHvMemoryAccessWrite) atype = L"write";
+        else if (c->AccessInfo.AccessType == WHvMemoryAccessExecute) atype = L"execute";
+        if (!report_write_w(h, L"\"memory\":{")) return false;
+        if (!report_write_w(h, L"\"access_type\":")) return false;
+        if (!report_write_json_string(h, atype)) return false;
+        if (!report_write_w(h, L",\"gpa\":")) return false;
+        if (!report_write_json_hex_u64(h, c->Gpa)) return false;
+        if (!report_write_w(h, L",\"gva\":")) return false;
+        if (!report_write_json_hex_u64(h, c->Gva)) return false;
+        if (!report_write_w(h, L",\"gva_valid\":")) return false;
+        if (!report_write_json_bool(h, c->AccessInfo.GvaValid != 0)) return false;
+        if (!report_write_w(h, L",\"gpa_unmapped\":")) return false;
+        if (!report_write_json_bool(h, c->AccessInfo.GpaUnmapped != 0)) return false;
+        if (!report_write_w(h, L",\"instruction\":")) return false;
+        if (!report_write_instruction_array(h, c->InstructionBytes, c->InstructionByteCount)) return false;
+        if (!report_write_w(h, L"}")) return false;
+        break;
+    }
+    case WHvRunVpExitReasonX64IoPortAccess: {
+        const WHV_X64_IO_PORT_ACCESS_CONTEXT* c = &run->exit_context.IoPortAccess;
+        if (!report_write_w(h, L"\"io\":{")) return false;
+        if (!report_write_w(h, L"\"is_write\":")) return false;
+        if (!report_write_json_bool(h, c->AccessInfo.IsWrite != 0)) return false;
+        if (!report_write_w(h, L",\"size\":")) return false;
+        if (!report_writef(h, L"%u", (unsigned)c->AccessInfo.AccessSize)) return false;
+        if (!report_write_w(h, L",\"port\":")) return false;
+        if (!report_writef(h, L"\"0x%X\"", (unsigned)c->PortNumber)) return false;
+        if (!report_write_w(h, L",\"instruction\":")) return false;
+        if (!report_write_instruction_array(h, c->InstructionBytes, c->InstructionByteCount)) return false;
+        if (!report_write_w(h, L"}")) return false;
+        break;
+    }
+    case WHvRunVpExitReasonX64MsrAccess: {
+        const WHV_X64_MSR_ACCESS_CONTEXT* c = &run->exit_context.MsrAccess;
+        if (!report_write_w(h, L"\"msr\":{")) return false;
+        if (!report_write_w(h, L"\"is_write\":")) return false;
+        if (!report_write_json_bool(h, c->AccessInfo.IsWrite != 0)) return false;
+        if (!report_write_w(h, L",\"msr\":")) return false;
+        if (!report_writef(h, L"\"0x%X\"", (unsigned)c->MsrNumber)) return false;
+        if (!report_write_w(h, L",\"rax\":")) return false;
+        if (!report_write_json_hex_u64(h, c->Rax)) return false;
+        if (!report_write_w(h, L",\"rdx\":")) return false;
+        if (!report_write_json_hex_u64(h, c->Rdx)) return false;
+        if (!report_write_w(h, L"}")) return false;
+        break;
+    }
+    case WHvRunVpExitReasonException: {
+        const WHV_VP_EXCEPTION_CONTEXT* c = &run->exit_context.VpException;
+        if (!report_write_w(h, L"\"exception\":{")) return false;
+        if (!report_write_w(h, L"\"type\":")) return false;
+        if (!report_writef(h, L"%u", (unsigned)c->ExceptionType)) return false;
+        if (!report_write_w(h, L",\"software\":")) return false;
+        if (!report_write_json_bool(h, c->ExceptionInfo.SoftwareException != 0)) return false;
+        if (!report_write_w(h, L",\"error_valid\":")) return false;
+        if (!report_write_json_bool(h, c->ExceptionInfo.ErrorCodeValid != 0)) return false;
+        if (!report_write_w(h, L",\"error\":")) return false;
+        if (!report_writef(h, L"\"0x%X\"", (unsigned)c->ErrorCode)) return false;
+        if (!report_write_w(h, L",\"param\":")) return false;
+        if (!report_write_json_hex_u64(h, c->ExceptionParameter)) return false;
+        if (!report_write_w(h, L",\"instruction\":")) return false;
+        if (!report_write_instruction_array(h, c->InstructionBytes, c->InstructionByteCount)) return false;
+        if (!report_write_w(h, L"}")) return false;
+        break;
+    }
+    default:
+        break;
+    }
+
+    return report_write_w(h, L"}");
+}
+
+static bool write_report_json_file(const OPTIONS* o,
+    const MAP_LIST* maps,
+    const PARTITION_CAPS* caps,
+    const RUN_REPORT* run,
+    const DUMP_RESULT* dump_results,
+    uint64_t elapsed_us) {
+    if (!o || !o->report_path) return true;
+
+    HANDLE h = CreateFileW(o->report_path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) {
+        errf(L"CreateFileW failed for report file %ls: %lu\n", o->report_path, (unsigned long)GetLastError());
+        return false;
+    }
+
+    PARTITION_CAPS zero_caps;
+    ZeroMemory(&zero_caps, sizeof(zero_caps));
+    if (!caps) caps = &zero_caps;
+
+    RUN_REPORT zero_run;
+    if (!run) {
+        init_run_report(&zero_run);
+        run = &zero_run;
+    }
+
+    bool ok = true;
+    ok = ok && report_write_w(h, L"{\n");
+    ok = ok && report_write_w(h, L"  \"mode\":");
+    ok = ok && report_write_json_string(h, mode_name(o->mode));
+    ok = ok && report_write_w(h, L",\n  \"cpl\":");
+    ok = ok && report_writef(h, L"%u", (unsigned)o->cpl);
+    ok = ok && report_write_w(h, L",\n  \"at\":");
+    ok = ok && report_write_json_hex_u64(h, o->entry.linear);
+    ok = ok && report_write_w(h, L",\n  \"ticks\":");
+    ok = ok && report_writef(h, L"%llu", (unsigned long long)o->ticks);
+
+    ok = ok && report_write_w(h, L",\n  \"areas\":[");
+    for (size_t i = 0; ok && i < o->areas.count; ++i) {
+        const AREA_SPEC* a = &o->areas.items[i];
+        uint64_t end = 0;
+        uint64_t page_end = 0;
+        bool range_ok = add_u64_checked(a->start, a->length, &end) &&
+            align_up_u64_checked(end, PAGE_SIZE_4K, &page_end);
+        if (i != 0) ok = ok && report_write_w(h, L",");
+        ok = ok && report_write_w(h, L"\n    {\"start\":");
+        ok = ok && report_write_json_hex_u64(h, a->start);
+        ok = ok && report_write_w(h, L",\"length\":");
+        ok = ok && report_write_json_hex_u64(h, a->length);
+        if (a->has_file) {
+            ok = ok && report_write_w(h, L",\"file\":");
+            ok = ok && report_write_json_string(h, a->file_path);
+        }
+        ok = ok && report_write_w(h, L",\"mapped_page_start\":");
+        ok = ok && report_write_json_hex_u64(h, align_down_u64(a->start, PAGE_SIZE_4K));
+        ok = ok && report_write_w(h, L",\"mapped_page_end\":");
+        ok = ok && report_write_json_hex_u64(h, range_ok ? page_end : align_down_u64(a->start, PAGE_SIZE_4K));
+        ok = ok && report_write_w(h, L"}");
+    }
+    ok = ok && report_write_w(h, (o->areas.count > 0) ? L"\n  ]" : L"]");
+
+    ok = ok && report_write_w(h, L",\n  \"capabilities\":{");
+    ok = ok && report_write_w(h, L"\"extended_vm_exits_supported\":");
+    ok = ok && report_write_json_bool(h, caps->extended_vm_exits_supported);
+    ok = ok && report_write_w(h, L",\"extended_vm_exits_supported_mask\":");
+    ok = ok && report_write_json_hex_u64(h, caps->extended_vm_exits_supported_mask);
+    ok = ok && report_write_w(h, L",\"extended_vm_exits_requested\":");
+    ok = ok && report_write_json_bool(h, caps->extended_vm_exits_requested);
+    ok = ok && report_write_w(h, L",\"extended_vm_exits_requested_mask\":");
+    ok = ok && report_write_json_hex_u64(h, caps->extended_vm_exits_requested_mask);
+    ok = ok && report_write_w(h, L",\"extended_vm_exits_enabled\":");
+    ok = ok && report_write_json_bool(h, caps->extended_vm_exits_enabled);
+    ok = ok && report_write_w(h, L",\"extended_vm_exits_enabled_mask\":");
+    ok = ok && report_write_json_hex_u64(h, caps->extended_vm_exits_enabled_mask);
+    ok = ok && report_write_w(h, L",\"exception_bitmap_supported\":");
+    ok = ok && report_write_json_bool(h, caps->exception_bitmap_supported);
+    ok = ok && report_write_w(h, L",\"exception_bitmap_supported_mask\":");
+    ok = ok && report_write_json_hex_u64(h, caps->exception_bitmap_supported_mask);
+    ok = ok && report_write_w(h, L",\"exception_bitmap_requested\":");
+    ok = ok && report_write_json_bool(h, caps->exception_bitmap_requested);
+    ok = ok && report_write_w(h, L",\"exception_bitmap_requested_mask\":");
+    ok = ok && report_write_json_hex_u64(h, caps->exception_bitmap_requested_mask);
+    ok = ok && report_write_w(h, L",\"exception_bitmap_enabled\":");
+    ok = ok && report_write_json_bool(h, caps->exception_bitmap_enabled);
+    ok = ok && report_write_w(h, L",\"exception_bitmap_enabled_mask\":");
+    ok = ok && report_write_json_hex_u64(h, caps->exception_bitmap_enabled_mask);
+    ok = ok && report_write_w(h, L",\"msr_exit_bitmap_supported\":");
+    ok = ok && report_write_json_bool(h, caps->msr_exit_bitmap_supported);
+    ok = ok && report_write_w(h, L",\"msr_exit_bitmap_supported_mask\":");
+    ok = ok && report_write_json_hex_u64(h, caps->msr_exit_bitmap_supported_mask);
+    ok = ok && report_write_w(h, L",\"msr_exit_bitmap_requested\":");
+    ok = ok && report_write_json_bool(h, caps->msr_exit_bitmap_requested);
+    ok = ok && report_write_w(h, L",\"msr_exit_bitmap_requested_mask\":");
+    ok = ok && report_write_json_hex_u64(h, caps->msr_exit_bitmap_requested_mask);
+    ok = ok && report_write_w(h, L",\"msr_exit_bitmap_enabled\":");
+    ok = ok && report_write_json_bool(h, caps->msr_exit_bitmap_enabled);
+    ok = ok && report_write_w(h, L",\"msr_exit_bitmap_enabled_mask\":");
+    ok = ok && report_write_json_hex_u64(h, caps->msr_exit_bitmap_enabled_mask);
+    ok = ok && report_write_w(h, L"}");
+
+    const wchar_t* exit_name = run->timed_out ? L"Timeout" :
+        (run->has_exit_reason ? exit_reason_name(run->exit_reason) : L"None");
+    ok = ok && report_write_w(h, L",\n  \"run\":{");
+    ok = ok && report_write_w(h, L"\"result\":");
+    ok = ok && report_write_json_string(h, run_status_name(run->status));
+    ok = ok && report_write_w(h, L",\"exit_reason\":");
+    ok = ok && report_write_json_string(h, exit_name);
+    ok = ok && report_write_w(h, L",\"rip\":");
+    ok = ok && report_write_json_hex_u64(h, run->rip);
+    ok = ok && report_write_w(h, L",\"details\":");
+    ok = ok && report_write_exit_details_json(h, run);
+    ok = ok && report_write_w(h, L"}");
+
+    ok = ok && report_write_w(h, L",\n  \"dumps\":[");
+    for (size_t i = 0; ok && i < o->dumps.count; ++i) {
+        const DUMP_SPEC* d = &o->dumps.items[i];
+        const wchar_t* status = L"not_run";
+        if (dump_results && dump_results[i].attempted) {
+            status = dump_results[i].ok ? L"ok" : L"error";
+        }
+        if (i != 0) ok = ok && report_write_w(h, L",");
+        ok = ok && report_write_w(h, L"\n    {\"start\":");
+        ok = ok && report_write_json_hex_u64(h, d->start);
+        ok = ok && report_write_w(h, L",\"length\":");
+        ok = ok && report_write_json_hex_u64(h, d->length);
+        ok = ok && report_write_w(h, L",\"target\":");
+        ok = ok && report_write_json_string(h, d->has_file ? L"file" : L"stdout");
+        if (d->has_file) {
+            ok = ok && report_write_w(h, L",\"file\":");
+            ok = ok && report_write_json_string(h, d->file_path);
+        }
+        ok = ok && report_write_w(h, L",\"status\":");
+        ok = ok && report_write_json_string(h, status);
+        ok = ok && report_write_w(h, L"}");
+    }
+    ok = ok && report_write_w(h, (o->dumps.count > 0) ? L"\n  ]" : L"]");
+
+    ok = ok && report_write_w(h, L",\n  \"timing\":{");
+    ok = ok && report_write_w(h, L"\"elapsed_us\":");
+    ok = ok && report_writef(h, L"%llu", (unsigned long long)elapsed_us);
+    ok = ok && report_write_w(h, L"}");
+
+    if (maps) {
+        ok = ok && report_write_w(h, L",\n  \"maps\":[");
+        for (size_t i = 0; ok && i < maps->count; ++i) {
+            const MAP_SEGMENT* m = &maps->items[i];
+            if (i != 0) ok = ok && report_write_w(h, L",");
+            ok = ok && report_write_w(h, L"\n    {\"start\":");
+            ok = ok && report_write_json_hex_u64(h, m->map_start);
+            ok = ok && report_write_w(h, L",\"end\":");
+            ok = ok && report_write_json_hex_u64(h, m->map_end);
+            ok = ok && report_write_w(h, L",\"size\":");
+            ok = ok && report_write_json_hex_u64(h, m->map_size);
+            ok = ok && report_write_w(h, L"}");
+        }
+        ok = ok && report_write_w(h, (maps->count > 0) ? L"\n  ]" : L"]");
+    }
+
+    ok = ok && report_write_w(h, L"\n}\n");
+
+    CloseHandle(h);
+    if (!ok) {
+        errf(L"failed while writing report file %ls\n", o->report_path);
+    }
+    return ok;
+}
+
 static bool query_reg64(WHV_PARTITION_HANDLE partition, WHV_REGISTER_NAME reg, uint64_t* out) {
     if (!out) return false;
     WHV_REGISTER_VALUE val;
@@ -2012,12 +2721,19 @@ static bool query_reg64(WHV_PARTITION_HANDLE partition, WHV_REGISTER_NAME reg, u
     return true;
 }
 
-static int run_vcpu_loop(WHV_PARTITION_HANDLE partition, const OPTIONS* o) {
+static int run_vcpu_loop(WHV_PARTITION_HANDLE partition, const OPTIONS* o, RUN_REPORT* run) {
     WHV_RUN_VP_EXIT_CONTEXT exit_ctx;
     ZeroMemory(&exit_ctx, sizeof(exit_ctx));
+    if (run) {
+        init_run_report(run);
+    }
 
     if (o->ticks == 0) {
         errw(L"timeout: /ticks was set to 0\n");
+        if (run) {
+            run->status = RUN_STATUS_VM_EXIT;
+            run->timed_out = true;
+        }
         return 3;
     }
 
@@ -2025,6 +2741,12 @@ static int run_vcpu_loop(WHV_PARTITION_HANDLE partition, const OPTIONS* o) {
         HRESULT hr = WHvRunVirtualProcessor(partition, 0, &exit_ctx, (UINT32)sizeof(exit_ctx));
         if (FAILED(hr)) {
             print_hresult(L"WHvRunVirtualProcessor", hr);
+            if (run) {
+                run->status = RUN_STATUS_SETUP_ERROR;
+                run->has_run_hresult = true;
+                run->run_hresult = hr;
+                run->ticks_executed = iter;
+            }
             return 1;
         }
 
@@ -2048,8 +2770,25 @@ static int run_vcpu_loop(WHV_PARTITION_HANDLE partition, const OPTIONS* o) {
 
         print_exit_details(&exit_ctx);
 
+        if (run) {
+            run->ticks_executed = iter + 1ull;
+            run->has_exit_reason = true;
+            run->exit_reason = exit_ctx.ExitReason;
+            run->rip = exit_ctx.VpContext.Rip;
+            run->rsp = rsp;
+            run->rflags = exit_ctx.VpContext.Rflags;
+            run->cpl = (uint8_t)exit_ctx.VpContext.ExecutionState.Cpl;
+            run->has_exit_context = (exit_ctx.ExitReason != WHvRunVpExitReasonNone);
+            if (run->has_exit_context) {
+                run->exit_context = exit_ctx;
+            }
+        }
+
         if (exit_ctx.ExitReason == WHvRunVpExitReasonX64Halt ||
             exit_ctx.ExitReason == WHvRunVpExitReasonHypercall) {
+            if (run) {
+                run->status = RUN_STATUS_SUCCESS;
+            }
             return 0;
         }
 
@@ -2057,10 +2796,18 @@ static int run_vcpu_loop(WHV_PARTITION_HANDLE partition, const OPTIONS* o) {
             continue;
         }
 
+        if (run) {
+            run->status = RUN_STATUS_VM_EXIT;
+        }
         return 4;
     }
 
     errf(L"timeout: exceeded /ticks limit (0x%llx)\n", (unsigned long long)o->ticks);
+    if (run) {
+        run->status = RUN_STATUS_VM_EXIT;
+        run->timed_out = true;
+        run->ticks_executed = o->ticks;
+    }
     return 3;
 }
 
@@ -2100,11 +2847,17 @@ static bool dump_to_stdout_pretty(const MAP_LIST* maps, uint64_t start, uint64_t
     return true;
 }
 
-static bool perform_dumps(const OPTIONS* o, const MAP_LIST* maps) {
+static bool perform_dumps(const OPTIONS* o, const MAP_LIST* maps, DUMP_RESULT* results, size_t results_count) {
     if (!o || !maps) return false;
 
     for (size_t i = 0; i < o->dumps.count; ++i) {
         const DUMP_SPEC* d = &o->dumps.items[i];
+        DUMP_RESULT* r = NULL;
+        if (results && i < results_count) {
+            r = &results[i];
+            r->attempted = true;
+            r->ok = false;
+        }
 
         if (!d->has_file) {
             if (!dump_to_stdout_pretty(maps, d->start, d->length)) {
@@ -2112,6 +2865,9 @@ static bool perform_dumps(const OPTIONS* o, const MAP_LIST* maps) {
                     (unsigned long long)d->start,
                     (unsigned long long)(d->start + d->length));
                 return false;
+            }
+            if (r) {
+                r->ok = true;
             }
             continue;
         }
@@ -2128,6 +2884,10 @@ static bool perform_dumps(const OPTIONS* o, const MAP_LIST* maps) {
         if (!ok) {
             errf(L"failed writing dump bytes to %ls\n", d->file_path);
             return false;
+        }
+
+        if (r) {
+            r->ok = true;
         }
 
         outf(L"dump [0x%llx..0x%llx) -> %ls\n",
@@ -2153,49 +2913,80 @@ int wmain(int argc, wchar_t** argv) {
         return 2;
     }
 
+    LARGE_INTEGER qpf = { 0 };
+    LARGE_INTEGER qpc_start = { 0 };
+    LARGE_INTEGER qpc_end = { 0 };
+    bool timing_ready = (QueryPerformanceFrequency(&qpf) != 0) &&
+        (QueryPerformanceCounter(&qpc_start) != 0);
+    uint64_t elapsed_us = 0;
+
+    PARTITION_CAPS caps;
+    ZeroMemory(&caps, sizeof(caps));
+
+    RUN_REPORT run_report;
+    init_run_report(&run_report);
+
+    INTERVAL_LIST user_intervals;
+    INTERVAL_LIST all_intervals;
+    MAP_LIST map_segments;
+    RUNTIME_LAYOUT rt;
+    ZeroMemory(&user_intervals, sizeof(user_intervals));
+    ZeroMemory(&all_intervals, sizeof(all_intervals));
+    ZeroMemory(&map_segments, sizeof(map_segments));
+    ZeroMemory(&rt, sizeof(rt));
+
+    DUMP_RESULT* dump_results = NULL;
+    if (opt.dumps.count > 0) {
+        dump_results = (DUMP_RESULT*)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, opt.dumps.count * sizeof(DUMP_RESULT));
+        if (!dump_results) {
+            errw(L"out of memory allocating dump result tracking\n");
+            HeapFree(GetProcessHeap(), 0, opt.areas.items);
+            HeapFree(GetProcessHeap(), 0, opt.dumps.items);
+            return 1;
+        }
+    }
+
+    WHV_PARTITION_HANDLE partition = NULL;
+    bool partition_setup = false;
+    bool vp_created = false;
+    bool mapped = false;
+    int exit_code = 1;
+
     if (!validate_area_non_overlapping(&opt)) {
         errw(L"invalid area layout\n");
         print_usage();
-        return 2;
+        exit_code = 2;
+        goto cleanup;
     }
 
     if (!check_dump_targets(&opt)) {
         errw(L"invalid dump target in pedantic mode\n");
         print_usage();
-        return 2;
+        exit_code = 2;
+        goto cleanup;
     }
 
     if (!load_area_files(&opt)) {
-        free_area_files(&opt);
-        return 1;
+        exit_code = 1;
+        goto cleanup;
     }
-
-    INTERVAL_LIST user_intervals;
-    INTERVAL_LIST all_intervals;
-    MAP_LIST map_segments;
-    ZeroMemory(&user_intervals, sizeof(user_intervals));
-    ZeroMemory(&all_intervals, sizeof(all_intervals));
-    ZeroMemory(&map_segments, sizeof(map_segments));
 
     uint64_t user_high_end = 0;
     if (!build_user_intervals(&opt, &user_intervals, &user_high_end)) {
         errw(L"failed to build user intervals\n");
-        free_area_files(&opt);
-        return 2;
+        exit_code = 2;
+        goto cleanup;
     }
 
-    RUNTIME_LAYOUT rt;
     if (!plan_runtime_layout(&opt, &user_intervals, user_high_end, &rt, &all_intervals, &map_segments)) {
         errw(L"failed runtime/memory layout planning\n");
-        HeapFree(GetProcessHeap(), 0, map_segments.items);
-        HeapFree(GetProcessHeap(), 0, all_intervals.items);
-        HeapFree(GetProcessHeap(), 0, user_intervals.items);
-        free_area_files(&opt);
-        return 2;
+        exit_code = 2;
+        goto cleanup;
     }
 
-    outf(L"mode=%ls at=0x%llx ticks=0x%llx areas=%llu dumps=%llu pedantic=%ls maps=%llu\n",
+    outf(L"mode=%ls cpl=%u at=0x%llx ticks=0x%llx areas=%llu dumps=%llu pedantic=%ls maps=%llu\n",
         mode_name(opt.mode),
+        (unsigned)opt.cpl,
         (unsigned long long)opt.entry.linear,
         (unsigned long long)opt.ticks,
         (unsigned long long)opt.areas.count,
@@ -2219,18 +3010,9 @@ int wmain(int argc, wchar_t** argv) {
     }
 
     if (!check_hypervisor_present()) {
-        HeapFree(GetProcessHeap(), 0, map_segments.items);
-        HeapFree(GetProcessHeap(), 0, all_intervals.items);
-        HeapFree(GetProcessHeap(), 0, user_intervals.items);
-        free_area_files(&opt);
-        return 1;
+        exit_code = 1;
+        goto cleanup;
     }
-
-    WHV_PARTITION_HANDLE partition = NULL;
-    bool partition_setup = false;
-    bool vp_created = false;
-    bool mapped = false;
-    int exit_code = 1;
 
     HRESULT hr = WHvCreatePartition(&partition);
     if (FAILED(hr)) {
@@ -2238,7 +3020,7 @@ int wmain(int argc, wchar_t** argv) {
         goto cleanup;
     }
 
-    if (!set_partition_properties(partition)) {
+    if (!set_partition_properties(partition, &caps)) {
         goto cleanup;
     }
 
@@ -2284,9 +3066,9 @@ int wmain(int argc, wchar_t** argv) {
         goto cleanup;
     }
 
-    exit_code = run_vcpu_loop(partition, &opt);
+    exit_code = run_vcpu_loop(partition, &opt, &run_report);
 
-    if (!perform_dumps(&opt, &map_segments)) {
+    if (!perform_dumps(&opt, &map_segments, dump_results, opt.dumps.count)) {
         if (exit_code == 0) exit_code = 1;
     }
 
@@ -2309,12 +3091,29 @@ cleanup:
         }
     }
 
+    if (timing_ready && QueryPerformanceCounter(&qpc_end)) {
+        LONGLONG delta = qpc_end.QuadPart - qpc_start.QuadPart;
+        if (delta < 0) delta = 0;
+        if (qpf.QuadPart > 0) {
+            elapsed_us = (uint64_t)(((uint64_t)delta * 1000000ull) / (uint64_t)qpf.QuadPart);
+        }
+    }
+
+    if (opt.report_path) {
+        if (!write_report_json_file(&opt, &map_segments, &caps, &run_report, dump_results, elapsed_us)) {
+            if (exit_code == 0) {
+                exit_code = 1;
+            }
+        }
+    }
+
     HeapFree(GetProcessHeap(), 0, map_segments.items);
     HeapFree(GetProcessHeap(), 0, all_intervals.items);
     HeapFree(GetProcessHeap(), 0, user_intervals.items);
     free_area_files(&opt);
     HeapFree(GetProcessHeap(), 0, opt.areas.items);
     HeapFree(GetProcessHeap(), 0, opt.dumps.items);
+    HeapFree(GetProcessHeap(), 0, dump_results);
 
     return exit_code;
 }

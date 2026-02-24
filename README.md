@@ -30,6 +30,15 @@ cl /nologo /W4 /O2 /DUNICODE /D_UNICODE <tool>.c
 
 See each tool's `.md` for usage, examples, and build notes.
 
+## Tool Tests
+
+`rawwhp` includes a discovery matrix and strict integration suite:
+
+```bat
+powershell -ExecutionPolicy Bypass -File tests\rawwhp\discover.ps1
+powershell -ExecutionPolicy Bypass -File tests\rawwhp\run.ps1
+```
+
 ## Contributing
 
 Ideas and contributions are welcome.
