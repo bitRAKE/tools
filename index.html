@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tools Portal</title>
+  <style>
+    :root {
+      --bg: #0f1520;
+      --card: #171f2d;
+      --line: #2d3d55;
+      --ink: #e8eef9;
+      --muted: #9fb0c8;
+      --hot: #84d1ff;
+    }
+    body {
+      margin: 0;
+      font: 16px/1.5 "Segoe UI", Arial, sans-serif;
+      background:
+        radial-gradient(860px 420px at -10% -20%, #223752 0%, transparent 58%),
+        linear-gradient(180deg, #121b2a, var(--bg));
+      color: var(--ink);
+      min-height: 100vh;
+    }
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 30px 18px 44px;
+    }
+    .hero, .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-family: Cambria, Georgia, serif;
+      font-size: clamp(30px, 4vw, 44px);
+    }
+    p {
+      margin: 0;
+      color: var(--muted);
+    }
+    .grid {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 10px;
+    }
+    a.card {
+      display: block;
+      text-decoration: none;
+      color: inherit;
+      transition: transform .14s ease, border-color .14s ease;
+    }
+    a.card:hover {
+      transform: translateY(-2px);
+      border-color: var(--hot);
+    }
+    .title {
+      margin: 0 0 6px;
+      font-size: 20px;
+      font-weight: 700;
+    }
+    .desc {
+      font-size: 14px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>Tools Portal</h1>
+      <p>Entry page for the GitHub Pages site. Use this to jump straight to docs, hype posts, and critical reviews.</p>
+    </section>
+
+    <section class="grid">
+      <a class="card" href="./README.md">
+        <div class="title">Repo README</div>
+        <div class="desc">Tool list, build notes, tests, and release pointers.</div>
+      </a>
+      <a class="card" href="./hype/">
+        <div class="title">Hype Blog</div>
+        <div class="desc">Adoption-oriented posts with use-case workflows and output spotlights.</div>
+      </a>
+      <a class="card" href="./reviews/">
+        <div class="title">Critical Reviews</div>
+        <div class="desc">Decision-record style evaluations focused on utility and alternatives.</div>
+      </a>
+      <a class="card" href="./CHANGELOG.md">
+        <div class="title">Changelog</div>
+        <div class="desc">Release-level summary for tagged versions.</div>
+      </a>
+    </section>
+  </main>
+</body>
+</html>

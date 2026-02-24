@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tools Reviews</title>
+  <style>
+    body {
+      margin: 0;
+      font: 16px/1.5 "Segoe UI", Arial, sans-serif;
+      color: #1f2937;
+      background: #f3f6fb;
+    }
+    main {
+      max-width: 940px;
+      margin: 0 auto;
+      padding: 28px 18px 44px;
+    }
+    .hero, .card {
+      background: #ffffff;
+      border: 1px solid #d5dfef;
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .grid {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 10px;
+    }
+    a.card {
+      color: inherit;
+      text-decoration: none;
+      transition: transform .14s ease, box-shadow .14s ease;
+    }
+    a.card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 18px rgba(10, 30, 70, 0.08);
+    }
+    h1 { margin: 0 0 8px; font-family: Cambria, Georgia, serif; }
+    .title { margin: 0 0 6px; font-weight: 700; font-size: 18px; }
+    .date { font-size: 13px; color: #425a79; }
+    .desc { color: #4b5563; font-size: 14px; margin-top: 6px; }
+    .links {
+      margin-top: 12px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>Critical Reviews</h1>
+      <p>Decision-record style evaluations focused on utility, scope fit, alternatives, and keep/improve/deprecate recommendations.</p>
+      <div class="links">
+        <a href="../hype/">Hype Blog</a> |
+        <a href="../README.md">Repo README</a>
+      </div>
+    </section>
+
+    <section class="grid">
+      <a class="card" href="./errnfo.html">
+        <div class="title">errnfo</div>
+        <div class="date">Review post</div>
+        <div class="desc">Error decode utility fit, message-table strategy, and alternatives.</div>
+      </a>
+      <a class="card" href="./modsnap.html">
+        <div class="title">modsnap</div>
+        <div class="date">Review post</div>
+        <div class="desc">Module snapshot workflow value and comparison to debugger-native paths.</div>
+      </a>
+      <a class="card" href="./quuid.html">
+        <div class="title">quuid</div>
+        <div class="date">Review post</div>
+        <div class="desc">GUID/COM discovery usefulness, limits, and practical alternatives.</div>
+      </a>
+      <a class="card" href="./rawwhp.html">
+        <div class="title">rawwhp</div>
+        <div class="date">Review post</div>
+        <div class="desc">Sparse WHP harness utility, scope, and keep/improve recommendation.</div>
+      </a>
+      <a class="card" href="./rpscan.html">
+        <div class="title">rpscan</div>
+        <div class="date">Review post</div>
+        <div class="desc">Reparse-point scanning value for safe automation preflight checks.</div>
+      </a>
+      <a class="card" href="./uwpchar.html">
+        <div class="title">uwpchar</div>
+        <div class="date">Review post</div>
+        <div class="desc">GUI utility fit in a CLI-heavy repo and migration/de-scope considerations.</div>
+      </a>
+      <a class="card" href="./wchain.html">
+        <div class="title">wchain</div>
+        <div class="date">Review post</div>
+        <div class="desc">WCT wait-chain utility for triage and integration tradeoffs.</div>
+      </a>
+    </section>
+  </main>
+</body>
+</html>

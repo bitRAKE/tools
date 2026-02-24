@@ -43,10 +43,17 @@ powershell -ExecutionPolicy Bypass -File tests\rawwhp\run.ps1
 
 This repo includes hype/adoption posts per tool:
 
-- `hype/index.html` (blog roll)
-- `hype/<tool>.html` (per-tool post)
+- [Hype Blog Roll](./hype/)
+- [rawwhp Hype Post](./hype/rawwhp.html)
 
 GitHub Pages can serve this directly from the same repo (root source).
+
+## Critical Reviews
+
+Independent utility critiques and keep/improve/deprecate guidance:
+
+- [Reviews Index](./reviews/)
+- [rawwhp Review](./reviews/rawwhp.html)
 
 ## Releases
 
