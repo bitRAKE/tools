@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>quuid: Turn GUID Noise into COM Intelligence</title>
+  <style>
+    body { margin: 0; font: 16px/1.55 "Segoe UI", Arial, sans-serif; background: #0f1613; color: #eaf7ef; }
+    main { max-width: 980px; margin: 0 auto; padding: 28px 18px 44px; }
+    section { margin-top: 14px; border: 1px solid #2f4b3c; border-radius: 12px; background: #14211a; padding: 18px; }
+    h1, h2 { margin: 0 0 8px; font-family: Cambria, Georgia, serif; }
+    h2 { color: #9ff7c4; }
+    p { margin: 0 0 10px; color: #c9ecd8; }
+    pre { margin: 8px 0 0; background: #0a120e; border: 1px solid #335648; border-radius: 8px; padding: 10px; overflow: auto; color: #dcffee; font: 13px/1.45 Consolas, monospace; }
+    code { background: #0a120e; border: 1px solid #335648; border-radius: 5px; padding: 0.1em 0.35em; }
+  </style>
+</head>
+<body>
+  <main>
+    <section>
+      <h1>quuid: GUID triage that actually closes loops</h1>
+      <p><strong>Date:</strong> February 02, 2026</p>
+      <p>Parse, resolve, enumerate, and pivot in one CLI. <code>quuid</code> is built for COM-heavy investigations where GUIDs are everywhere.</p>
+    </section>
+
+    <section>
+      <h2>Quick Parse for Pipelines</h2>
+      <pre>_test\quuid.exe parse 6F9619FF-8B86-D011-B42D-00C04FC964FF --one-line</pre>
+      <pre>{6F9619FF-8B86-D011-B42D-00C04FC964FF}</pre>
+      <p>Use this mode when you need normalization before joins, dedupe, or registry lookup workflows.</p>
+    </section>
+
+    <section>
+      <h2>Workflow 1: Resolve COM Meaning in Both Registry Views</h2>
+      <pre>_test\quuid.exe find "{00021401-0000-0000-C000-000000000046}" --both-views</pre>
+      <pre>{00021401-0000-0000-C000-000000000046}
+  [CLSID:64] Shortcut
+    InprocServer32     C:\Windows\System32\windows.storage.dll
+  [CLSID:32] Shortcut
+    InprocServer32     C:\Windows\SysWOW64\windows.storage.dll</pre>
+      <p>This immediately answers 64/32 registration divergence questions that waste hours in mixed-bitness environments.</p>
+    </section>
+
+    <section>
+      <h2>Workflow 2: Inventory the Namespace</h2>
+      <pre>_test\quuid.exe enum clsid --limit 5 --with-name</pre>
+      <pre>[CLSID] CLSID  {0000031A-0000-0000-C000-000000000046}
+[CLSID] {0000002F-0000-0000-C000-000000000046}  CLSID_RecordInfo
+[CLSID] {00000300-0000-0000-C000-000000000046}  StdOleLink
+[CLSID] {00000301-A8F2-4877-BA0A-FD2B6645FB94}  PSFactoryBuffer</pre>
+      <p>Great for environment baselining, COM footprint reporting, and forensic pivots from suspicious GUIDs.</p>
+    </section>
+
+    <section>
+      <h2>Guardrails</h2>
+      <p>Binary scanning modes intentionally trade precision for recall. Keep <code>--registry</code> and view flags in the loop so noisy matches become actionable ones.</p>
+    </section>
+  </main>
+</body>
+</html>

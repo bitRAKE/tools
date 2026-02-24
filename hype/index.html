@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tools Hype Blog</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --card: #151a24;
+      --line: #2a3447;
+      --ink: #e9eef9;
+      --muted: #9fb0c9;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 16px/1.5 "Segoe UI", Arial, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1000px 420px at -10% -10%, #25344f 0%, transparent 60%),
+        radial-gradient(900px 420px at 110% 0%, #2f2748 0%, transparent 58%),
+        linear-gradient(180deg, #111622, var(--bg));
+      min-height: 100vh;
+    }
+    main { max-width: 980px; margin: 0 auto; padding: 28px 18px 44px; }
+    .hero {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px;
+      background: linear-gradient(135deg, #1b2436, #161d2b);
+    }
+    h1 { margin: 0 0 8px; font-family: Cambria, Georgia, serif; font-size: clamp(30px, 4vw, 44px); }
+    p { margin: 0; color: var(--muted); }
+    .grid {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+    }
+    .card {
+      display: block;
+      text-decoration: none;
+      color: inherit;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--card);
+      padding: 14px;
+      transition: transform .16s ease, border-color .16s ease;
+    }
+    .card:hover { transform: translateY(-2px); border-color: #77c1ff; }
+    .title { margin: 0 0 5px; font-weight: 700; font-size: 19px; }
+    .date { color: #7ec8ff; font-size: 13px; margin-bottom: 6px; }
+    .desc { color: var(--muted); font-size: 14px; }
+    .tone-1 { background: linear-gradient(180deg, #192433, #141d2a); }
+    .tone-2 { background: linear-gradient(180deg, #231e30, #1a1625); }
+    .tone-3 { background: linear-gradient(180deg, #1b2a24, #15211c); }
+    .tone-4 { background: linear-gradient(180deg, #2a2319, #201a13); }
+    .tone-5 { background: linear-gradient(180deg, #1d2231, #151a25); }
+    .tone-6 { background: linear-gradient(180deg, #27201a, #1d1712); }
+    .tone-7 { background: linear-gradient(180deg, #1f1f22, #17171a); }
+    .foot {
+      margin-top: 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #131926;
+      padding: 12px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    code { background: #0d131f; border: 1px solid #2d3d57; border-radius: 5px; padding: 0.1em 0.3em; color: #cfe4ff; }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="hero">
+      <h1>Tools Hype Blog</h1>
+      <p>High-value workflows, crisp demos, and practical guardrails for the Windows tools in this repo.</p>
+    </header>
+
+    <section class="grid">
+      <a class="card tone-1" href="./errnfo.html">
+        <h2 class="title">errnfo</h2>
+        <div class="date">February 01, 2026</div>
+        <div class="desc">Decode HRESULT/NTSTATUS/Win32 values fast and extend message coverage with module tables.</div>
+      </a>
+
+      <a class="card tone-2" href="./modsnap.html">
+        <h2 class="title">modsnap</h2>
+        <div class="date">February 05, 2026</div>
+        <div class="desc">Get script-friendly module truth for a process in table, path, CSV, or count mode.</div>
+      </a>
+
+      <a class="card tone-3" href="./quuid.html">
+        <h2 class="title">quuid</h2>
+        <div class="date">February 02, 2026</div>
+        <div class="desc">Turn GUID sightings into COM context with registry pivots, scans, and inventory commands.</div>
+      </a>
+
+      <a class="card tone-4" href="./rpscan.html">
+        <h2 class="title">rpscan</h2>
+        <div class="date">February 02, 2026</div>
+        <div class="desc">Pre-flight check reparse-point risk before deployment or cleanup automation touches paths.</div>
+      </a>
+
+      <a class="card tone-5" href="./uwpchar.html">
+        <h2 class="title">uwpchar</h2>
+        <div class="date">February 02, 2026</div>
+        <div class="desc">Browse icon fonts visually and export deterministic codepoint defines for shipping UI work.</div>
+      </a>
+
+      <a class="card tone-6" href="./wchain.html">
+        <h2 class="title">wchain</h2>
+        <div class="date">February 05, 2026</div>
+        <div class="desc">Inspect wait-chain topology quickly for hung-thread triage before full debugger sessions.</div>
+      </a>
+
+      <a class="card tone-7" href="./rawwhp.html">
+        <h2 class="title">rawwhp</h2>
+        <div class="date">February 24, 2026</div>
+        <div class="desc">Script sparse guest memory, execute probes, and capture exit topology plus post-run dumps.</div>
+      </a>
+    </section>
+
+    <div class="foot">
+      GitHub Pages can serve this folder from the same repo. Typical setup: <code>Settings → Pages → Deploy from branch → main → /(root)</code>, then browse <code>/hype/</code>.
+    </div>
+  </main>
+</body>
+</html>

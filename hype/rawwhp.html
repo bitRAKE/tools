@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>rawwhp: A Tiny VM Lab You Can Script</title>
+  <style>
+    :root {
+      --bg0: #0c1117;
+      --bg1: #151d28;
+      --card: #1a2431;
+      --ink: #e7edf7;
+      --muted: #9db0c7;
+      --hot: #3ad4ff;
+      --warm: #ffcb6b;
+      --ok: #7ee787;
+      --line: #2a3a4d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font: 16px/1.55 "Bahnschrift", "Trebuchet MS", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(1100px 480px at 10% -10%, #1b2a40 0%, transparent 60%),
+        radial-gradient(900px 420px at 100% 0%, #17263b 0%, transparent 56%),
+        linear-gradient(180deg, var(--bg1), var(--bg0));
+      min-height: 100vh;
+    }
+    .wrap { max-width: 1024px; margin: 0 auto; padding: 32px 20px 48px; }
+    .hero {
+      border: 1px solid var(--line);
+      background: linear-gradient(130deg, #182335 0%, #111923 60%);
+      padding: 28px;
+      border-radius: 16px;
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.28);
+    }
+    .eyebrow {
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--hot);
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-family: "Rockwell", "Cambria", serif;
+      font-size: clamp(30px, 4vw, 44px);
+      line-height: 1.1;
+    }
+    .sub {
+      margin: 0;
+      color: var(--muted);
+      max-width: 78ch;
+    }
+    .grid {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+    }
+    .pill {
+      background: #121a25;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .pill strong { color: var(--ink); }
+    section {
+      margin-top: 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 20px;
+      background: linear-gradient(180deg, #151f2d, #121a25);
+    }
+    h2 {
+      margin: 0 0 8px;
+      font-family: "Rockwell", "Cambria", serif;
+      color: var(--warm);
+      font-size: 24px;
+    }
+    p { margin: 0 0 10px; }
+    ul { margin: 8px 0 0 18px; color: var(--muted); }
+    code {
+      background: #0d141d;
+      border: 1px solid #26384c;
+      border-radius: 6px;
+      padding: 0.1em 0.35em;
+      color: #c5e4ff;
+    }
+    pre {
+      margin: 10px 0 0;
+      background: #0a1118;
+      border: 1px solid #26384c;
+      border-radius: 10px;
+      padding: 12px;
+      overflow: auto;
+      color: #d5e7ff;
+      font: 13px/1.45 "Consolas", "Cascadia Mono", monospace;
+    }
+    .recipe {
+      margin-top: 12px;
+      padding: 12px;
+      border-left: 3px solid var(--hot);
+      background: #101925;
+      border-radius: 8px;
+    }
+    .warn {
+      border-left-color: #ff9b6a;
+    }
+    .ok { color: var(--ok); font-weight: 700; }
+    .kicker {
+      margin-top: 16px;
+      font-size: 20px;
+      font-family: "Rockwell", "Cambria", serif;
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="hero">
+      <div class="eyebrow">Hype Post</div>
+      <h1>rawwhp turns WHP into a scriptable byte-lab</h1>
+      <p class="sub">
+        You pick exact guest physical regions. You load optional files into them. You run one probe. You dump exactly what changed.
+        No full VM image ceremony. Just controlled memory topology and fast exit feedback.
+      </p>
+      <div class="grid">
+        <div class="pill"><strong>Tool:</strong> rawwhp</div>
+        <div class="pill"><strong>Date:</strong> February 24, 2026</div>
+        <div class="pill"><strong>Coverage:</strong> real/unreal/protected/long + CPL 0/3</div>
+        <div class="pill"><strong>Evidence:</strong> commands executed on this host</div>
+      </div>
+    </header>
+
+    <section>
+      <h2>Fastest Win: One Command, One Exit, One Report</h2>
+      <p>When you only need a deterministic VM-exit observation, this is the shortest path.</p>
+      <pre>_test\rawwhp.exe /area 10000 20 tests\rawwhp\probes\generated\hlt.bin /at 10000 /ticks 40 /report hype\captures\hlt_report.json</pre>
+      <pre>mode=real cpl=0 at=0x10000 ticks=0x40 areas=1 dumps=0 pedantic=no maps=1
+  area[0] [0x10000..0x10020) init=tests\rawwhp\probes\generated\hlt.bin
+  runtime-area [0x11000..0x15000)
+[tick 0x1] exit=X64Halt(0x00000008) rip=0x1 rsp=0x3ff0 rflags=0x2 cpl=0</pre>
+      <p class="recipe">The report captures host support vs requested vs enabled masks, run result, and mapped segments in machine-readable JSON.</p>
+    </section>
+
+    <section>
+      <h2>Workflow 1: Round-Trip Code/Data in One Run</h2>
+      <p>Use paired dumps to inspect bytes on screen and persist output artifacts for diffing.</p>
+      <pre>_test\rawwhp.exe /area 10000 20 tests\rawwhp\probes\generated\hlt.bin /at 10000 /ticks 40 ^
+  /dump 10000 10 /dump 10000 10 hype\captures\dump.bin /report hype\captures\dump_report.json</pre>
+      <pre>DUMP start=0x10000 len=0x10 -> stdout
+Legend: ADDR | HEX | ASCII
+00010000  F4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+dump [0x10000..0x10010) -> hype\captures\dump.bin</pre>
+      <p class="recipe">Perfect for micro payload bring-up: map bytes, execute, inspect exact post-state, save binary evidence.</p>
+    </section>
+
+    <section>
+      <h2>Workflow 2: Privilege Topology Without a Full OS</h2>
+      <p>Flip to ring-0 behavior with <code>/cpl 0</code> and provoke high-value exits directly.</p>
+      <pre>_test\rawwhp.exe /mode long /cpl 0 /area 10000 100 tests\rawwhp\probes\generated\rdmsr_unk.bin ^
+  /at 10000 /ticks 400 /report hype\captures\msr_report.json</pre>
+      <pre>mode=long cpl=0 at=0x10000 ticks=0x400 areas=1 dumps=0 pedantic=no maps=1
+  area[0] [0x10000..0x10100) init=tests\rawwhp\probes\generated\rdmsr_unk.bin
+  runtime-area [0x11000..0x19000)
+[tick 0x1] exit=X64MsrAccess(0x00001000) rip=0x10005 rsp=0x14ff0 rflags=0x2 cpl=0
+  msr-access is-write=0 msr=0xDEADBEEF rax=0x0 rdx=0xa60f12</pre>
+      <p class="recipe">This gives you a clean path to test exception vs intercepted-exit behavior by mode/CPL, with no device-model noise.</p>
+    </section>
+
+    <section>
+      <h2>Workflow 3: Host-Aware Regression Gate</h2>
+      <p>Use the bundled suite to keep behavior stable while accounting for host capability variation.</p>
+      <pre>powershell -ExecutionPolicy Bypass -File tests\rawwhp\run.ps1 -SkipBuild</pre>
+      <pre>[1/4] Mapping granularity checks
+[2/4] Dump behavior checks
+[3/4] Capability gate
+[4/4] Strict exit matrix
+<span class="ok">PASS strict matrix: 13/13</span></pre>
+      <p class="recipe">This is where rawwhp moves from "handy command" to "maintainable platform tool."</p>
+    </section>
+
+    <section>
+      <h2>How to Aim the Tool (Layering Model)</h2>
+      <ul>
+        <li><strong>Host layer:</strong> <code>WHvGetCapability</code> defines what is possible.</li>
+        <li><strong>Partition layer:</strong> property masks define what is accepted now.</li>
+        <li><strong>Guest layer:</strong> <code>/mode</code>, <code>/cpl</code>, <code>/area</code>, <code>/at</code> shape execution context.</li>
+        <li><strong>Probe layer:</strong> instruction bytes decide the actual exit.</li>
+      </ul>
+      <p class="recipe">Use <code>discover.ps1</code> to map baseline behavior, then lock focused checks into <code>strict_exits.json</code>.</p>
+    </section>
+
+    <section>
+      <h2>Guardrails (Keep It Honest)</h2>
+      <div class="recipe warn">
+        <ul>
+          <li>Mapping is page-oriented (4 KiB), not byte-isolated.</li>
+          <li>In long mode, identity page tables use 2 MiB entries for mapped segments.</li>
+          <li><code>extended_vm_exits_supported_mask</code> can be broader than the accepted/requested partition mask.</li>
+          <li><code>/cpl 3</code> vs <code>/cpl 0</code> can completely change expected exits.</li>
+        </ul>
+      </div>
+      <p class="kicker">Verdict for builders: rawwhp is now a serious micro-hypervisor harness for repeatable exit topology work.</p>
+    </section>
+  </main>
+</body>
+</html>

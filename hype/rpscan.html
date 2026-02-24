@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>rpscan: Reparse-Point Risk Sweep in Seconds</title>
+  <style>
+    body { margin: 0; font: 16px/1.55 "Segoe UI", Arial, sans-serif; background: #18140f; color: #fff3e3; }
+    main { max-width: 920px; margin: 0 auto; padding: 26px 16px 42px; }
+    section { margin-top: 14px; border: 1px solid #57412f; border-radius: 12px; background: #221a13; padding: 16px; }
+    h1, h2 { margin: 0 0 8px; font-family: Cambria, Georgia, serif; }
+    h2 { color: #ffd08c; }
+    p { margin: 0 0 10px; color: #efd6b8; }
+    pre { margin: 8px 0 0; background: #130f0b; border: 1px solid #6a4e38; border-radius: 8px; padding: 10px; overflow: auto; color: #ffe7c8; font: 13px/1.45 Consolas, monospace; }
+    code { background: #130f0b; border: 1px solid #6a4e38; border-radius: 5px; padding: 0.1em 0.35em; }
+  </style>
+</head>
+<body>
+  <main>
+    <section>
+      <h1>rpscan: pre-flight safety for file operations</h1>
+      <p><strong>Date:</strong> February 02, 2026</p>
+      <p>If your script can delete, overwrite, or deploy, it can also follow a junction you never meant to trust. <code>rpscan</code> catches that early.</p>
+    </section>
+
+    <section>
+      <h2>Live Demo Fixture</h2>
+      <pre>cmd /c mklink /J hype\tmp\rpscan_demo\link hype\tmp\rpscan_demo\target
+_test\rpscan.exe hype\tmp\rpscan_demo --recursive --stats</pre>
+      <pre>Junction created for hype\tmp\rpscan_demo\link &lt;&lt;===&gt;&gt; hype\tmp\rpscan_demo\target
+MOUNT_POINT 0xA0000003 hype\tmp\rpscan_demo\link -> C:\temp\rpscan_demo\target
+scanned: 3
+reparse: 1</pre>
+      <p>Exactly the result you need before destructive automation touches a tree.</p>
+    </section>
+
+    <section>
+      <h2>Workflow 1: Cheap CI Gate</h2>
+      <pre>_test\rpscan.exe C:\work\repo --recursive --stats</pre>
+      <p>Fail the pipeline if unexpected reparse points appear. Pair with allowlisted tags/paths when needed.</p>
+    </section>
+
+    <section>
+      <h2>Workflow 2: Path-Only Integration</h2>
+      <pre>_test\rpscan.exe hype\tmp\rpscan_demo --recursive --paths</pre>
+      <pre>hype\tmp\rpscan_demo\link</pre>
+      <p>Use this mode to feed downstream policy logic without parsing verbose lines.</p>
+    </section>
+
+    <section>
+      <h2>Guardrails</h2>
+      <p>Directory reparse points are reported but not traversed by design. That is a safety choice, not a bug.</p>
+    </section>
+  </main>
+</body>
+</html>

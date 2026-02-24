@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>modsnap: Process Module Visibility in One Shot</title>
+  <style>
+    body { margin: 0; font: 16px/1.55 "Segoe UI", Arial, sans-serif; background: #121118; color: #edf0ff; }
+    main { max-width: 920px; margin: 0 auto; padding: 26px 16px 42px; }
+    section { margin-top: 14px; border: 1px solid #34324a; border-radius: 12px; background: #1a1827; padding: 16px; }
+    h1, h2 { margin: 0 0 8px; font-family: Cambria, Georgia, serif; }
+    h2 { color: #9ad3ff; }
+    p { margin: 0 0 10px; color: #cfd8f7; }
+    pre { margin: 8px 0 0; background: #0f0d16; border: 1px solid #3a3c5b; border-radius: 8px; padding: 10px; overflow: auto; color: #e4e8ff; font: 13px/1.45 Consolas, monospace; }
+  </style>
+</head>
+<body>
+  <main>
+    <section>
+      <h1>modsnap: DLL inventory without debugger overhead</h1>
+      <p><strong>Date:</strong> February 05, 2026</p>
+      <p><code>modsnap</code> is exactly what you want when you need quick module truth for a PID: table, paths, CSV, or just count.</p>
+    </section>
+
+    <section>
+      <h2>Fastest Signal</h2>
+      <pre>_test\modsnap.exe --self --count</pre>
+      <pre>4</pre>
+      <p>For scripts and health checks, this single integer can be enough to detect load drift.</p>
+    </section>
+
+    <section>
+      <h2>Workflow 1: Capture Scriptable Baseline</h2>
+      <pre>_test\modsnap.exe --self --csv</pre>
+      <pre>pid,base,size,module,path
+4632,"0x00007FF69C120000",163840,"modsnap.exe","C:\tools\_test\modsnap.exe"
+4632,"0x00007FFDDD000000",2523136,"ntdll.dll","C:\WINDOWS\SYSTEM32\ntdll.dll"
+4632,"0x00007FFDDC010000",823296,"KERNEL32.DLL","C:\WINDOWS\System32\KERNEL32.DLL"</pre>
+      <p>Store this in build artifacts, then diff between runs to catch unexpected module injections or dependency shifts.</p>
+    </section>
+
+    <section>
+      <h2>Workflow 2: Export Paths for Follow-up Tooling</h2>
+      <pre>_test\modsnap.exe --self --paths</pre>
+      <pre>C:\tools\_test\modsnap.exe
+C:\WINDOWS\SYSTEM32\ntdll.dll
+C:\WINDOWS\System32\KERNEL32.DLL
+C:\WINDOWS\System32\KERNELBASE.dll</pre>
+      <p>Pipe directly into signature checks, hash scans, PE metadata tooling, or allowlist validation.</p>
+    </section>
+
+    <section>
+      <h2>Guardrails</h2>
+      <p>Expect permission limits on protected targets and cross-bitness quirks. `modsnap` is for rapid visibility, not full loader telemetry.</p>
+    </section>
+  </main>
+</body>
+</html>

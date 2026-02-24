@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>uwpchar: Icon Font Browsing that Ships Faster UI</title>
+  <style>
+    body { margin: 0; font: 16px/1.55 "Segoe UI", Arial, sans-serif; background: #101621; color: #eef4ff; }
+    main { max-width: 980px; margin: 0 auto; padding: 28px 18px 44px; }
+    section { margin-top: 14px; border: 1px solid #31445d; border-radius: 12px; background: #172132; padding: 18px; }
+    h1, h2 { margin: 0 0 8px; font-family: Cambria, Georgia, serif; }
+    h2 { color: #8fd0ff; }
+    p { margin: 0 0 10px; color: #ccdaf0; }
+    pre { margin: 8px 0 0; background: #0d141f; border: 1px solid #3d5675; border-radius: 8px; padding: 10px; overflow: auto; color: #e2edff; font: 13px/1.45 Consolas, monospace; }
+    code { background: #0d141f; border: 1px solid #3d5675; border-radius: 5px; padding: 0.1em 0.35em; }
+  </style>
+</head>
+<body>
+  <main>
+    <section>
+      <h1>uwpchar: stop guessing icon codepoints</h1>
+      <p><strong>Date:</strong> February 02, 2026</p>
+      <p><code>uwpchar</code> is a GUI-first tool for icon font discovery, preview, and export. It cuts the lookup friction between UI design and code.</p>
+    </section>
+
+    <section>
+      <h2>Core GUI Workflow</h2>
+      <pre>_test\uwpchar.exe</pre>
+      <p>Pick font, pick size, click glyphs, copy generated defines. You get a fast visual loop without opening browser docs in another window.</p>
+      <p>Recommended sequence: <code>Segoe Fluent Icons</code> at target UI size, emit format template, paste into your project constants.</p>
+    </section>
+
+    <section>
+      <h2>Workflow 1: Refresh Name Mapping from Docs</h2>
+      <pre>python uwpchar_extract_names.py --md _test\segoe-ui-symbol-font.md --md _test\segoe-fluent-icons-font.md --out hype\uwpchar_names_preview.h
+rg -n "kUwpcharMdl2Base|kUwpcharFluentBase|TokenCount" hype\uwpchar_names_preview.h</pre>
+      <pre>4:static const uint32_t kUwpcharMdl2Base = 0xE700;
+851:static const uint16_t kUwpcharMdl2TokenCount = 843;
+13231:static const uint32_t kUwpcharFluentBase = 0xE700;
+14116:static const uint16_t kUwpcharFluentTokenCount = 881;</pre>
+      <p>This keeps naming aligned with source markdown and makes exported identifiers more useful than raw Unicode values.</p>
+    </section>
+
+    <section>
+      <h2>Workflow 2: Dual Delivery</h2>
+      <p>Use native <code>uwpchar.exe</code> for local production work and <code>uwpchar.html</code> for quick sharing/demo scenarios where a browser is easier.</p>
+    </section>
+
+    <section>
+      <h2>Guardrails</h2>
+      <p>It is an icon discovery/export tool, not a full design system manager. Keep naming conventions and token ownership in your app repo.</p>
+    </section>
+  </main>
+</body>
+</html>

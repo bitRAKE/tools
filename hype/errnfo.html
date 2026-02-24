@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>errnfo: Decode Windows Errors at Investigative Speed</title>
+  <style>
+    body { margin: 0; font: 16px/1.55 "Segoe UI", Arial, sans-serif; background: #0f1722; color: #e7edf7; }
+    main { max-width: 940px; margin: 0 auto; padding: 28px 18px 44px; }
+    section { background: #151f2c; border: 1px solid #2a3a4d; border-radius: 12px; padding: 18px; margin-top: 14px; }
+    h1, h2 { margin: 0 0 8px; font-family: Cambria, Georgia, serif; }
+    h2 { color: #ffd27a; font-size: 22px; }
+    p { margin: 0 0 10px; color: #c5d3e6; }
+    pre { margin: 10px 0 0; background: #0b121b; border: 1px solid #314760; border-radius: 8px; padding: 10px; overflow: auto; color: #d9e7ff; font: 13px/1.45 Consolas, monospace; }
+    code { background: #0b121b; border: 1px solid #314760; border-radius: 5px; padding: 0.1em 0.3em; }
+    .hero { background: linear-gradient(135deg, #1b2c42, #121a25); }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>errnfo: decode first, hunt less</h1>
+      <p>When logs only give you raw hex, <code>errnfo</code> turns numbers into structured meaning and relevant message text fast.</p>
+      <p><strong>Date:</strong> February 01, 2026</p>
+    </section>
+
+    <section>
+      <h2>Quick Value</h2>
+      <pre>_test\errnfo.exe hr 0x80070005</pre>
+      <pre>HRESULT
+  value: 0x80070005
+  facility: 0x007 (7) FACILITY_WIN32
+  code: 0x0005 (5)
+  message: Access is denied.  [(system)]</pre>
+      <p>This is exactly the triage speed you want in incident response and build-failure debugging.</p>
+    </section>
+
+    <section>
+      <h2>Workflow 1: Build Your Message-Table Arsenal</h2>
+      <p>Scan known system locations once, keep the module list for future decode sessions.</p>
+      <pre>_test\errnfo.exe scan C:\Windows\System32 | Select-Object -First 8</pre>
+      <pre>-m "C:\Windows\System32\aadcloudap.dll"
+-m "C:\Windows\System32\aadtb.dll"
+-m "C:\Windows\System32\aadWamExtension.dll"
+-m "C:\Windows\System32\accountaccessor.dll"</pre>
+      <p>Now you have copy-pasteable module flags to improve coverage when system messages are missing.</p>
+    </section>
+
+    <section>
+      <h2>Workflow 2: Inspect One Module Deeply</h2>
+      <pre>_test\errnfo.exe dump wininet.dll --tables</pre>
+      <pre>table #1  lang 0x0409  blocks 36</pre>
+      <p>Use <code>dump</code> when you suspect the text exists, but you need to prove where it lives and which language table has it.</p>
+    </section>
+
+    <section>
+      <h2>Guardrails</h2>
+      <p><code>errnfo</code> is an error intelligence tool, not a root-cause engine. It gives you high-quality semantic context; your call stack and environment still decide the true fix.</p>
+    </section>
+  </main>
+</body>
+</html>

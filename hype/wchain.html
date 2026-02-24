@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>wchain: Thread Wait Topology at CLI Speed</title>
+  <style>
+    body { margin: 0; font: 16px/1.55 "Segoe UI", Arial, sans-serif; background: #151515; color: #f2f2f2; }
+    main { max-width: 980px; margin: 0 auto; padding: 28px 18px 44px; }
+    section { margin-top: 14px; border: 1px solid #3f3f3f; border-radius: 12px; background: #212121; padding: 18px; }
+    h1, h2 { margin: 0 0 8px; font-family: Cambria, Georgia, serif; }
+    h2 { color: #b7f7a0; }
+    p { margin: 0 0 10px; color: #dbdbdb; }
+    pre { margin: 8px 0 0; background: #131313; border: 1px solid #4b4b4b; border-radius: 8px; padding: 10px; overflow: auto; color: #ececec; font: 13px/1.45 Consolas, monospace; }
+    code { background: #131313; border: 1px solid #4b4b4b; border-radius: 5px; padding: 0.1em 0.35em; }
+  </style>
+</head>
+<body>
+  <main>
+    <section>
+      <h1>wchain: from "app is hung" to real wait edges</h1>
+      <p><strong>Date:</strong> February 05, 2026</p>
+      <p><code>wchain</code> gives you thread-level wait-chain topology quickly, which is the missing middle between "it froze" and opening a full debugger session.</p>
+    </section>
+
+    <section>
+      <h2>Immediate Snapshot</h2>
+      <pre>_test\wchain.exe --self --all-threads --include-running</pre>
+      <pre>PID 1234 (C:\tools\_test\wchain.exe)
+Filter: all threads, include running threads
+
+TID 32680 [GUI] [running] nodes=1 cycle=no
+TID 27704 [non-GUI] [running] nodes=1 cycle=no
+Summary: total=4 gui=1 inspected=4 displayed=4 blocked=0 failures=0</pre>
+      <p>Useful as a quick sanity pass before deciding whether to attach debugger or gather dumps.</p>
+    </section>
+
+    <section>
+      <h2>Workflow 1: UI-Hang Triage</h2>
+      <pre>_test\wchain.exe --pid &lt;targetPid&gt;</pre>
+      <p>Default behavior is already tuned for GUI blocked-thread focus, so you get a concise first read instead of a wall of thread noise.</p>
+    </section>
+
+    <section>
+      <h2>Workflow 2: Full Topology During Incident</h2>
+      <pre>_test\wchain.exe --pid &lt;targetPid&gt; --all-threads --include-running --verbose</pre>
+      <p>Use this mode when you need a broad process state report and API detail for inaccessible threads.</p>
+    </section>
+
+    <section>
+      <h2>Guardrails</h2>
+      <p>WCT gives chain topology, not full scheduler truth. Treat this as high-value triage context and pair with traces/dumps for final diagnosis.</p>
+    </section>
+  </main>
+</body>
+</html>

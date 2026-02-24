@@ -39,6 +39,20 @@ powershell -ExecutionPolicy Bypass -File tests\rawwhp\discover.ps1
 powershell -ExecutionPolicy Bypass -File tests\rawwhp\run.ps1
 ```
 
+## Blog
+
+This repo includes hype/adoption posts per tool:
+
+- `hype/index.html` (blog roll)
+- `hype/<tool>.html` (per-tool post)
+
+GitHub Pages can serve this directly from the same repo (root source).
+
+## Releases
+
+- `CHANGELOG.md` tracks release-level summaries.
+- Initial tagged release target: `v1.0.0`.
+
 ## Contributing
 
 Ideas and contributions are welcome.
