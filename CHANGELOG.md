@@ -7,6 +7,7 @@ First formal multi-tool release for this repository.
 ### Included tools
 
 - `errnfo` - HRESULT/NTSTATUS/Win32 decode + message-table scan/dump
+- `hdrinfo` - display HDR/output metadata and Windows HDR troubleshooting context
 - `modsnap` - process module snapshot (table/path/csv/count)
 - `quuid` - GUID/COM parse + registry/scan/type-lib tooling
 - `rawwhp` - WHP sparse area mapping, execution, dumps, reports
