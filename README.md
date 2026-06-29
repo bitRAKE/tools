@@ -10,6 +10,7 @@ A small collection of **single-file C CLI tools** for Windows. Each tool is desi
 ## Tools
 
 - `errnfo` — decode HRESULT/NTSTATUS/Win32 error codes; scan and dump message tables.
+- `hdrinfo` — report Windows display HDR/output metadata, color encoding, and troubleshooting hints.
 - `modsnap` — snapshot a process module list (base, size, name, path) with table/CSV/path/count output.
 - `quuid` — GUID/COM discovery: parse, registry lookup, scan binaries, inspect type libraries.
 - `rawwhp` — define multiple WHP guest memory areas, run code, and dump selected GPA ranges.
