@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>hdrinfo: HDR Truth Before You Tune Pixels</title>
+  <style>
+    :root { --bg: #11131b; --card: #1a2130; --line: #314057; --ink: #eef4ff; --muted: #a8b6cc; --hot: #9df0ff; --warm: #ffd37a; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font: 16px/1.55 "Segoe UI", Arial, sans-serif;
+      background:
+        radial-gradient(900px 420px at 10% -10%, #20395a 0%, transparent 62%),
+        radial-gradient(800px 420px at 100% 0%, #49305a 0%, transparent 58%),
+        linear-gradient(180deg, #151b28, var(--bg));
+      min-height: 100vh;
+    }
+    main { max-width: 980px; margin: 0 auto; padding: 30px 18px 46px; }
+    section, .hero { border: 1px solid var(--line); border-radius: 14px; background: linear-gradient(180deg, #1b2434, #151d2a); padding: 18px; margin-top: 14px; }
+    .hero { margin-top: 0; padding: 24px; }
+    .eyebrow { color: var(--hot); text-transform: uppercase; letter-spacing: .12em; font-size: 12px; }
+    h1, h2 { margin: 0 0 8px; font-family: Cambria, Georgia, serif; }
+    h1 { font-size: clamp(30px, 4vw, 44px); line-height: 1.1; }
+    h2 { color: var(--warm); }
+    p { margin: 0 0 10px; color: var(--muted); }
+    ul { margin: 8px 0 0 20px; color: var(--muted); }
+    code { background: #101722; border: 1px solid #30415b; border-radius: 5px; padding: .1em .35em; color: #d8edff; }
+    pre { margin: 10px 0 0; background: #0d131d; border: 1px solid #30415b; border-radius: 10px; padding: 12px; overflow: auto; color: #d8edff; font: 13px/1.45 Consolas, "Cascadia Mono", monospace; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin-top: 14px; }
+    .pill { border: 1px solid var(--line); border-radius: 10px; background: #131b28; padding: 10px 12px; color: var(--muted); }
+    .pill strong { color: var(--ink); }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="hero">
+      <div class="eyebrow">Hype Post</div>
+      <h1>hdrinfo gives HDR work a real display baseline</h1>
+      <p>
+        Before you tune a swap chain, tone mapper, or bug report around "HDR looks wrong", capture what Windows and DXGI actually know about the active outputs.
+        <code>hdrinfo</code> condenses that state into one shareable CLI report.
+      </p>
+      <div class="grid">
+        <div class="pill"><strong>Tool:</strong> hdrinfo</div>
+        <div class="pill"><strong>Date:</strong> July 03, 2026</div>
+        <div class="pill"><strong>Sources:</strong> DisplayConfig + IDXGIOutput6</div>
+        <div class="pill"><strong>Build:</strong> single C file, Windows SDK</div>
+      </div>
+    </header>
+
+    <section>
+      <h2>Fastest Win: Separate Panel Capability From OS State</h2>
+      <p>Run the tool once and you can tell whether the problem is hardware support, the Windows HDR toggle, link format, or tone-mapping assumptions.</p>
+      <pre>cl /O2 /W4 hdrinfo.c /link dxgi.lib dxguid.lib user32.lib
+hdrinfo.exe</pre>
+      <pre>HDR supported     : YES
+HDR enabled       : YES
+Bits per channel  : 10 bpc
+Color encoding    : RGB
+SDR white level   : 240 nits (slider 300.0%)
+DXGI color space  : HDR10 (PQ / BT.2020)</pre>
+    </section>
+
+    <section>
+      <h2>Workflow 1: Pick the Swap-Chain Format With Evidence</h2>
+      <p>Use the combined report as a pre-flight before choosing SDR, HDR10, or FP16/scRGB output paths.</p>
+      <ul>
+        <li><strong>HDR supported + enabled + 10 bpc:</strong> exercise the HDR path and verify tone mapping.</li>
+        <li><strong>HDR supported but disabled:</strong> avoid treating SDR compositor output as a rendering bug.</li>
+        <li><strong>8 bpc or YCbCr fallback:</strong> check bandwidth, cable, resolution, and refresh-rate constraints first.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Workflow 2: Normalize SDR UI in HDR</h2>
+      <p>The SDR white level gives a concrete scale factor for legacy UI brightness in an HDR desktop.</p>
+      <pre>scRGB white scale = SDRWhiteNits / 80.0
+240 nits / 80 nits = 3.0</pre>
+      <p>That turns a subjective "too dim" or "washed out" report into a reproducible value to apply or compare.</p>
+    </section>
+
+    <section>
+      <h2>Workflow 3: Capture Tone-Mapping Anchors</h2>
+      <p>DXGI luminance and primary coordinates provide practical limits for highlight clipping, full-frame brightness, black floor, and gamut expectations.</p>
+      <ul>
+        <li><strong>Max luminance:</strong> specular highlight ceiling.</li>
+        <li><strong>Max full-frame luminance:</strong> sustained bright-scene target.</li>
+        <li><strong>Min luminance:</strong> shadow floor and contrast warning.</li>
+        <li><strong>Primaries:</strong> quick check for sRGB, DCI-P3, or wider-gamut behavior.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Guardrails</h2>
+      <p><code>hdrinfo</code> reports OS/display metadata; it does not measure the panel with a colorimeter or prove what an application rendered. Treat it as the first diagnostic artifact, then pair it with screenshots, captures, or instrumented rendering logs when chasing visual defects.</p>
+    </section>
+  </main>
+</body>
+</html>

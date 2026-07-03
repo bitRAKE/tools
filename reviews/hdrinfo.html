@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tool Review: hdrinfo</title>
+  <style>
+    body { font-family: "Segoe UI", Arial, sans-serif; margin: 2rem auto; max-width: 900px; line-height: 1.5; color: #1f2937; }
+    h1, h2 { color: #111827; }
+    code { background: #f3f4f6; padding: 0.1rem 0.3rem; border-radius: 4px; }
+    .verdict { padding: 0.75rem 1rem; background: #eef2ff; border-left: 4px solid #4f46e5; }
+  </style>
+</head>
+<body>
+  <article>
+    <h1>Tool Review: hdrinfo</h1>
+    <p><strong>Date:</strong> July 03, 2026</p>
+    <p class="verdict"><strong>Executive verdict:</strong> <code>hdrinfo</code> is a strong fit for the repository: a single-file Windows CLI that turns hard-to-see HDR display state into actionable diagnostics. Recommendation: <strong>keep and improve</strong>.</p>
+
+    <h2>What It Does Well</h2>
+    <ul>
+      <li>Combines DisplayConfig and DXGI output metadata in one command instead of forcing manual registry, Settings, and graphics-debugger checks.</li>
+      <li>Reports both panel capability and current Windows state, which helps separate hardware, OS-toggle, and rendering-path problems.</li>
+      <li>Documents field meanings clearly enough for swap-chain, SDR-white, luminance, and gamut decisions.</li>
+      <li>Stays aligned with the repo's small-tool constraint: one C source file plus one Markdown usage/reference page.</li>
+    </ul>
+
+    <h2>Limitations and Risks</h2>
+    <ul>
+      <li>Windows-only APIs mean there is no meaningful Linux cron build or runtime check for the tool itself.</li>
+      <li>Reported luminance and primaries are metadata, not calibrated measurements; bad EDID or driver data can still mislead.</li>
+      <li>The output is plain text only, so automation must parse human-oriented labels.</li>
+      <li>No command-line switches yet for targeting one monitor, emitting JSON, or suppressing explanatory text.</li>
+    </ul>
+
+    <h2>Alternatives and Tradeoffs</h2>
+    <ul>
+      <li><strong>Windows Settings / Advanced display:</strong> easy to access but not scriptable and does not expose the full DXGI field set.</li>
+      <li><strong>DirectX diagnostics or graphics debuggers:</strong> deeper for rendering pipelines but heavier for support tickets and quick baselines.</li>
+      <li><strong>Colorimeter workflow:</strong> more accurate for calibration, but outside the low-friction diagnostic scope of this repo.</li>
+    </ul>
+
+    <h2>Workflow Fit</h2>
+    <ul>
+      <li><strong>Game/tool bring-up:</strong> run before choosing HDR10, scRGB, or SDR fallback behavior.</li>
+      <li><strong>Support triage:</strong> ask users to paste one report alongside screenshots and GPU/driver information.</li>
+      <li><strong>Display troubleshooting:</strong> identify YCbCr fallback, 8 bpc output, disabled HDR, or suspicious luminance metadata quickly.</li>
+    </ul>
+
+    <h2>Evidence Snapshot</h2>
+    <ul>
+      <li><code>hdrinfo.md</code> documents the MSVC build command, no-argument CLI, DisplayConfig fields, DXGI fields, and interpretation tables.</li>
+      <li><code>hdrinfo.c</code> declares a single-file Windows tool using DXGI, DisplayConfig, and user32-linked APIs.</li>
+      <li>The tool is listed in the release changelog; this review adds the missing Pages review parity entry.</li>
+    </ul>
+
+    <h2>Final Recommendation</h2>
+    <p><strong>Recommendation: keep and improve.</strong> The best follow-up is a <code>--json</code> mode with stable field names, plus optional monitor selection for multi-display systems.</p>
+  </article>
+</body>
+</html>
