@@ -93,11 +93,14 @@ static void errw(const wchar_t* s) {
 
 static void vfmt_to(HANDLE h, bool is_console, const wchar_t* fmt, va_list ap) {
     wchar_t stackbuf[2048];
+    va_list ap_stack;
+    va_copy(ap_stack, ap);
 #if defined(_MSC_VER)
-    int n = _vsnwprintf_s(stackbuf, _countof(stackbuf), _TRUNCATE, fmt, ap);
+    int n = _vsnwprintf_s(stackbuf, _countof(stackbuf), _TRUNCATE, fmt, ap_stack);
 #else
-    int n = vswprintf(stackbuf, (int)(sizeof(stackbuf) / sizeof(stackbuf[0])), fmt, ap);
+    int n = vswprintf(stackbuf, (int)(sizeof(stackbuf) / sizeof(stackbuf[0])), fmt, ap_stack);
 #endif
+    va_end(ap_stack);
     if (n >= 0) {
         write_w(h, is_console, stackbuf);
         return;
@@ -145,10 +148,13 @@ static bool streqi(const wchar_t* a, const wchar_t* b) {
 static bool parse_u32(const wchar_t* s, uint32_t* out) {
     if (!s || !*s || !out) return false;
 
+    while (*s == L' ' || *s == L'\t' || *s == L'\r' || *s == L'\n') s++;
+    if (*s == L'+' || *s == L'-' || *s == 0) return false;
+
     errno = 0;
     wchar_t* end = NULL;
     unsigned long long v = wcstoull(s, &end, 0);
-    if (end == s || errno == ERANGE) return false;
+    if (end == s || errno == ERANGE || v > UINT32_MAX) return false;
 
     while (*end == L' ' || *end == L'\t' || *end == L'\r' || *end == L'\n') end++;
     if (*end != 0) return false;
