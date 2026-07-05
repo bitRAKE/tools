@@ -143,7 +143,10 @@ static void errw(const wchar_t* s) {
 
 static void vfmt_to(HANDLE h, bool is_console, const wchar_t* fmt, va_list ap) {
     wchar_t stackbuf[2048];
-    int n = _vsnwprintf_s(stackbuf, _countof(stackbuf), _TRUNCATE, fmt, ap);
+    va_list copy;
+    va_copy(copy, ap);
+    int n = _vsnwprintf_s(stackbuf, _countof(stackbuf), _TRUNCATE, fmt, copy);
+    va_end(copy);
     if (n >= 0) {
         write_w(h, is_console, stackbuf);
         return;
@@ -154,7 +157,9 @@ static void vfmt_to(HANDLE h, bool is_console, const wchar_t* fmt, va_list ap) {
         wchar_t* dyn = (wchar_t*)HeapAlloc(GetProcessHeap(), 0, cap * sizeof(wchar_t));
         if (!dyn) return;
 
-        _vsnwprintf_s(dyn, cap, _TRUNCATE, fmt, ap);
+        va_copy(copy, ap);
+        _vsnwprintf_s(dyn, cap, _TRUNCATE, fmt, copy);
+        va_end(copy);
         write_w(h, is_console, dyn);
         HeapFree(GetProcessHeap(), 0, dyn);
     }
