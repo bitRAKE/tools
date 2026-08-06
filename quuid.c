@@ -64,6 +64,85 @@ static int is_hex_w(wchar_t c) {
         (c >= L'A' && c <= L'F');
 }
 
+static int hex_val_w(wchar_t c) {
+    if (c >= L'0' && c <= L'9') return (int)(c - L'0');
+    if (c >= L'a' && c <= L'f') return 10 + (int)(c - L'a');
+    if (c >= L'A' && c <= L'F') return 10 + (int)(c - L'A');
+    return -1;
+}
+
+static void skip_space_w(const wchar_t** ps) {
+    const wchar_t* s = *ps;
+    while (*s == L' ' || *s == L'\t' || *s == L'\r' || *s == L'\n' ||
+        *s == L'\v' || *s == L'\f') {
+        s++;
+    }
+    *ps = s;
+}
+
+static int take_char_w(const wchar_t** ps, wchar_t expected) {
+    skip_space_w(ps);
+    if (**ps != expected) return 0;
+    (*ps)++;
+    return 1;
+}
+
+static int parse_c_hex_w(const wchar_t** ps, size_t digits, DWORD* out) {
+    const wchar_t* s = *ps;
+    DWORD value = 0;
+
+    skip_space_w(&s);
+    if (s[0] != L'0' || (s[1] != L'x' && s[1] != L'X')) return 0;
+    s += 2;
+
+    for (size_t i = 0; i < digits; i++) {
+        int hv = hex_val_w(s[i]);
+        if (hv < 0) return 0;
+        value = (value << 4) | (DWORD)hv;
+    }
+    s += digits;
+
+    *ps = s;
+    *out = value;
+    return 1;
+}
+
+// C GUID initializer:
+// {0xdddddddd,0xdddd,0xdddd,{0xdd,0xdd,0xdd,0xdd,0xdd,0xdd,0xdd,0xdd}}
+static int parse_guid_c_initializer(const wchar_t* s, GUID* out) {
+    const wchar_t* p = s;
+    GUID g = { 0 };
+    DWORD value = 0;
+
+    if (!take_char_w(&p, L'{')) return 0;
+    if (!parse_c_hex_w(&p, 8, &value)) return 0;
+    g.Data1 = value;
+    if (!take_char_w(&p, L',')) return 0;
+
+    if (!parse_c_hex_w(&p, 4, &value)) return 0;
+    g.Data2 = (WORD)value;
+    if (!take_char_w(&p, L',')) return 0;
+
+    if (!parse_c_hex_w(&p, 4, &value)) return 0;
+    g.Data3 = (WORD)value;
+    if (!take_char_w(&p, L',')) return 0;
+    if (!take_char_w(&p, L'{')) return 0;
+
+    for (size_t i = 0; i < ARRAYSIZE(g.Data4); i++) {
+        if (!parse_c_hex_w(&p, 2, &value)) return 0;
+        g.Data4[i] = (BYTE)value;
+        if (i + 1 < ARRAYSIZE(g.Data4) && !take_char_w(&p, L',')) return 0;
+    }
+
+    if (!take_char_w(&p, L'}')) return 0;
+    if (!take_char_w(&p, L'}')) return 0;
+    skip_space_w(&p);
+    if (*p != L'\0') return 0;
+
+    *out = g;
+    return 1;
+}
+
 static int hex_val8(char c) {
     if (c >= '0' && c <= '9') return (int)(c - '0');
     if (c >= 'a' && c <= 'f') return 10 + (int)(c - 'a');
@@ -172,11 +251,14 @@ static int looks_like_guid_memlayout_loose(const unsigned char* b) {
 // - {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}
 // - xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 // - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (32 hex)
+// - {0xdddddddd,0xdddd,0xdddd,{0xdd,0xdd,0xdd,0xdd,0xdd,0xdd,0xdd,0xdd}}
 static int parse_guid_any(const wchar_t* s, GUID* out) {
     if (!s || !*s) return 0;
 
     HRESULT hr = CLSIDFromString((LPOLESTR)s, out);
     if (SUCCEEDED(hr)) return 1;
+
+    if (parse_guid_c_initializer(s, out)) return 1;
 
     size_t n = wcslen(s);
     if (n == 36) {

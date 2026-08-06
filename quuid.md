@@ -13,6 +13,7 @@ Design goals:
 ## Features
 
 ### Parse GUIDs into useful forms
+- Accepts canonical braced, dashed, 32-hex-digit, and C initializer input
 - Braced canonical form (`{...}`)
 - Dashed form
 - Field breakdown (`Data1/Data2/Data3/Data4`)
@@ -112,6 +113,14 @@ quuid find "{00021401-0000-0000-C000-000000000046}" --wow64
 
 ```bat
 quuid parse 6F9619FF-8B86-D011-B42D-00C04FC964FF
+```
+
+### Parse a C GUID initializer
+
+Quote the initializer so PowerShell passes it as one argument:
+
+```powershell
+quuid parse '{0x8868e871,0xe4f1,0x11d3,{0xbc,0x22,0x00,0x80,0xc7,0x3c,0x88,0x81}}'
 ```
 
 ### Parse (scripting mode)
