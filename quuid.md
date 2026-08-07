@@ -76,15 +76,18 @@ Loads a type library (`.tlb`, or a `.dll`/`.ocx` with embedded TypeLib) and prin
 ### Compile (x64)
 ```bat
 cl /nologo /W4 /O2 /DUNICODE /D_UNICODE quuid.c ole32.lib oleaut32.lib advapi32.lib
-````
+```
 
 ---
 
 ## Usage
 
-Global flags (before the command):
+Global options:
 
-* `--verbose` prints Win32 error messages for non-fatal failures (missing files, access denied, etc.)
+* `--verbose` prints the underlying Win32, registry, and HRESULT details for incomplete operations.
+* `--help` prints command usage.
+
+Options are accepted in any unambiguous position before or after the command's required argument. Use `--` to treat the remaining tokens as positionals.
 
 Commands:
 
@@ -96,6 +99,16 @@ quuid server <clsid-guid> [--scan] [scan flags...]
 quuid tlb    <file.tlb|.dll|.ocx>
 quuid enum   clsid|iid|typelib|appid [--limit N] [--with-name]
 ```
+
+Registry-aware commands accept `--wow32`, `--wow64`, or `--both-views`. `scan` accepts `--registry`, `--binary`, `--binary-loose`, `--locate`, and `--one-line`. The same scan options are available to `server` when `--scan` is present. `enum` defaults to 100 entries; `--limit 0` means no limit.
+
+Exit status is part of the command contract:
+
+* `0`: the requested work completed. A valid lookup with no registry match is still complete.
+* `1`: a runtime operation was incomplete or failed.
+* `2`: the command line or GUID input was invalid.
+
+Normal output stays terse. An incomplete operation always emits a summary; add `--verbose` for the individual API failures.
 
 ---
 
@@ -127,6 +140,12 @@ quuid parse '{0x8868e871,0xe4f1,0x11d3,{0xbc,0x22,0x00,0x80,0xc7,0x3c,0x88,0x81}
 
 ```bat
 quuid parse 6F9619FF-8B86-D011-B42D-00C04FC964FF --one-line
+```
+
+Options may also lead naturally:
+
+```bat
+quuid --one-line parse 6F9619FF-8B86-D011-B42D-00C04FC964FF
 ```
 
 ### Find COM registration (64-bit view)
@@ -183,7 +202,8 @@ quuid tlb C:\Windows\System32\stdole2.tlb
 
 * ASCII scanning is typically high-signal.
 * Binary scanning can be very noisy in general binaries; `--binary` uses a variant+version heuristic to keep the set smaller.
-* If you need maximum recall, use `--binary-loose` and pair it with `--registry` to filter hits that actually correspond to COM registrations.
+* If you need maximum recall, use `--binary-loose`; `--registry` adds COM registration context to the resulting GUIDs.
+* Noisy results are intentional. Redirect or post-process them rather than expecting `quuid` to grow filtering and output-policy options.
 
 ---
 
@@ -201,14 +221,19 @@ When doing low-level Windows/COM work you often see GUIDs in:
 
 ---
 
-## Extending quuid
+## Testing
 
-Natural next additions that fit the current architecture:
+From an MSVC Developer Command Prompt:
 
-* Output formats tailored for assembly macro ingestion (`define GUID.NAME ...` / `db` / `dq`)
-* Raw GUID scanning for alternate byte orders (wire/network order) as an explicit mode
-* Optional reparse traversal with loop detection
-* JSON output mode for toolchain integration
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tests\quuid\run.ps1
+```
+
+The focused suite covers accepted GUID forms, flexible option placement, malformed input, exit codes, and exact ASCII/binary scan behavior across the 4 MiB chunk boundary.
+
+## Scope
+
+`quuid` is intentionally a narrow GUID/COM investigation tool. Prefer correctness improvements inside the existing parse, registry, scan, server, enumeration, and TypeLib workflows. Extension filters, result caps, sorting controls, JSON schemas, alternate scan policies, and reparse traversal are deliberately left to shell composition or other tools.
 
 ---
 
