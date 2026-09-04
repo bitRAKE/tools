@@ -144,11 +144,14 @@ static void errw(const wchar_t* s) {
 
 static void vfmt_to(HANDLE h, bool is_console, const wchar_t* fmt, va_list ap) {
     wchar_t stackbuf[2048];
+    va_list ap2;
+    va_copy(ap2, ap);
 #if defined(_MSC_VER)
-    int n = _vsnwprintf_s(stackbuf, _countof(stackbuf), _TRUNCATE, fmt, ap);
+    int n = _vsnwprintf_s(stackbuf, _countof(stackbuf), _TRUNCATE, fmt, ap2);
 #else
-    int n = vswprintf(stackbuf, (int)(sizeof(stackbuf) / sizeof(stackbuf[0])), fmt, ap);
+    int n = vswprintf(stackbuf, (int)(sizeof(stackbuf) / sizeof(stackbuf[0])), fmt, ap2);
 #endif
+    va_end(ap2);
     if (n >= 0) {
         write_w(h, is_console, stackbuf);
         return;
@@ -158,7 +161,6 @@ static void vfmt_to(HANDLE h, bool is_console, const wchar_t* fmt, va_list ap) {
     wchar_t* dyn = (wchar_t*)malloc(cap * sizeof(wchar_t));
     if (!dyn) return;
 
-    va_list ap2;
     va_copy(ap2, ap);
 #if defined(_MSC_VER)
     _vsnwprintf_s(dyn, cap, _TRUNCATE, fmt, ap2);
